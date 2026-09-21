@@ -13,6 +13,7 @@ interface EntryRow {
   status: string;
   pay_reference: string | null;
   msa_license_url: string | null;
+  pop_url_driver: string | null;
   drivers: { full_name: string; email: string } | null;
   vehicles: { make: string; model: string; year: number } | null;
   race_classes: { name: string } | null;
@@ -66,7 +67,7 @@ export default function AdminPaymentsPage() {
       .from('event_entries')
         .select(
         `
-        id, race_number, sponsor, fee_amount, status, pay_reference, msa_license_url,
+        id, race_number, sponsor, fee_amount, status, pay_reference, msa_license_url, pop_url_driver,
         drivers(full_name, email),
         vehicles(make, model, year),
         race_classes(name),
@@ -358,22 +359,32 @@ export default function AdminPaymentsPage() {
                         </button>
                       )}
                     </td>
-                    <td>
-                        {entry.msa_license_url ? (
-                            <button className="fiori-btn fiori-btn-ghost" onClick={() => handleViewDocument(entry.msa_license_url)}>
-                            Licence
-                            </button>
-                        ) : (
-                            <span className="text-xs text-[var(--fiori-text-subtle)]">No licence</span>
-                        )}
-                        {entry.payments[entry.payments.length - 1]?.pop_file_url && (
-                            <button
-                            className="fiori-btn fiori-btn-ghost ml-2"
-                            onClick={() => handleViewDocument(entry.payments[entry.payments.length - 1].pop_file_url)}
-                            >
-                            POP
-                            </button>
-                        )}
+                                        <td>
+                        <div className="flex flex-wrap gap-2">
+                          {entry.msa_license_url ? (
+                              <button className="fiori-btn fiori-btn-ghost" onClick={() => handleViewDocument(entry.msa_license_url)}>
+                              Licence
+                              </button>
+                          ) : (
+                              <span className="text-xs text-[var(--fiori-text-subtle)]">No licence</span>
+                          )}
+                          {entry.pop_url_driver && (
+                              <button
+                              className="fiori-btn fiori-btn-ghost"
+                              onClick={() => handleViewDocument(entry.pop_url_driver)}
+                              >
+                              POP
+                              </button>
+                          )}
+                          {entry.payments[entry.payments.length - 1]?.pop_file_url && (
+                              <button
+                              className="fiori-btn fiori-btn-ghost"
+                              onClick={() => handleViewDocument(entry.payments[entry.payments.length - 1].pop_file_url)}
+                              >
+                              Receipt
+                              </button>
+                          )}
+                        </div>
                     </td>
                   </tr>
                 );

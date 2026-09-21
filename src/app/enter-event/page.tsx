@@ -77,6 +77,7 @@ export default function EnterEventPage() {
   const [vehicleId, setVehicleId] = useState('');
   const [newVehicle, setNewVehicle] = useState<NewVehicleForm>(emptyNewVehicle);
   const [msaLicenseFile, setMsaLicenseFile] = useState<File | null>(null);
+  const [popFile, setPopFile] = useState<File | null>(null);
 
   // Step 3 / submit state
   const [gcrAccepted, setGcrAccepted] = useState(false);
@@ -205,18 +206,33 @@ export default function EnterEventPage() {
       resolvedVehicleId = createdVehicle.id;
     }
     let msaLicenseUrl: string | null = null;
-        if (msaLicenseFile) {
-        try {
-            msaLicenseUrl = await uploadEntryDocument(msaLicenseFile, 'msa-licenses', driver.id);
-        } catch (err) {
-            setSubmitting(false);
-            setMessage({
-            type: 'negative',
-            text: `Couldn't upload MSA licence: ${err instanceof Error ? err.message : 'unknown error'}`,
-            });
-            return;
-        }
-        }
+    if (msaLicenseFile) {
+      try {
+        msaLicenseUrl = await uploadEntryDocument(msaLicenseFile, 'msa-licenses', driver.id);
+      } catch (err) {
+        setSubmitting(false);
+        setMessage({
+          type: 'negative',
+          text: `Couldn't upload MSA licence: ${err instanceof Error ? err.message : 'unknown error'}`,
+        });
+        return;
+      }
+    }
+
+    let popUrl: string | null = null;
+    if (popFile) {
+      try {
+        popUrl = await uploadEntryDocument(popFile, 'pop-driver', driver.id);
+      } catch (err) {
+        setSubmitting(false);
+        setMessage({
+          type: 'negative',
+          text: `Couldn't upload proof of payment: ${err instanceof Error ? err.message : 'unknown error'}`,
+        });
+        return;
+      }
+    }
+
     const isLate = new Date() > new Date(selectedEvent.late_entry_cutoff);
     const payReference = `#${raceNumber.trim()} - ${driver.full_name}`;
 
@@ -235,6 +251,7 @@ export default function EnterEventPage() {
         entry_fee_id: selectedFee.id,
         pay_reference: payReference,
         msa_license_url: msaLicenseUrl,
+        pop_url_driver: popUrl,
       })
       .select()
       .single();
@@ -506,7 +523,7 @@ export default function EnterEventPage() {
             )}
 
             <div className="mb-2 text-sm font-semibold">Documents</div>
-            <div className="mb-8">
+            <div className="mb-4">
               <label className="fiori-label">MSA Race Licence (PDF or photo)</label>
               <input
                 className="fiori-input"
@@ -516,6 +533,18 @@ export default function EnterEventPage() {
               />
               {msaLicenseFile && (
                 <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {msaLicenseFile.name}</div>
+              )}
+            </div>
+            <div className="mb-8">
+              <label className="fiori-label">Proof of Payment (PDF or photo)</label>
+              <input
+                className="fiori-input"
+                type="file"
+                accept="application/pdf,image/*"
+                onChange={(e) => setPopFile(e.target.files?.[0] ?? null)}
+              />
+              {popFile && (
+                <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {popFile.name}</div>
               )}
             </div>
 
