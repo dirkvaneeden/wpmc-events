@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     `;
 
     const { data, error } = await resend.emails.send({
-      from: 'Western Province Motor Club <onboarding@resend.dev>',
+      from: 'Western Province Motor Club <mailer@events.slothwp.co.za>',
       to,
       subject: `WPMC Killarney Race Entry - #${raceNumber} (${driverName})`,
       html,
