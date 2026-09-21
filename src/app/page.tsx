@@ -28,6 +28,12 @@ export default function HomePage() {
               Existing Driver — Log In
             </Link>
           </div>
+          <p className="text-xs text-center text-[var(--fiori-text-subtle)] mt-8">
+            Club staff?{' '}
+            <Link href="/admin/login" className="text-[var(--fiori-action)] hover:underline">
+              Admin Log In
+            </Link>
+          </p>
         </div>
       </div>
     </div>
