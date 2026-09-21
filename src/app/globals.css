@@ -1,26 +1,124 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --fiori-shell: #354a5f;
+  --fiori-action: #0070f2;
+  --fiori-action-hover: #0058c9;
+  --fiori-bg: #f7f7f7;
+  --fiori-surface: #ffffff;
+  --fiori-border: #d9d9d9;
+  --fiori-text: #32363a;
+  --fiori-text-subtle: #6a6d70;
+  --fiori-positive: #107e3e;
+  --fiori-negative: #bb0000;
+  --font-fiori: '72', '72full', Arial, Helvetica, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--fiori-bg);
+  color: var(--fiori-text);
+  font-family: var(--font-fiori);
+  font-size: 14px;
+}
+
+.fiori-shell {
+  background: var(--fiori-shell);
+  color: #ffffff;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.fiori-btn {
+  border-radius: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 16px;
+  height: 34px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.fiori-btn-emphasized {
+  background: var(--fiori-action);
+  color: #ffffff;
+  border: 1px solid var(--fiori-action);
+}
+.fiori-btn-emphasized:hover {
+  background: var(--fiori-action-hover);
+}
+
+.fiori-btn-ghost {
+  background: transparent;
+  color: var(--fiori-action);
+  border: 1px solid var(--fiori-border);
+}
+.fiori-btn-ghost:hover {
+  background: #f0f4ff;
+}
+
+.fiori-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--fiori-surface);
+  border: 1px solid var(--fiori-border);
+}
+
+.fiori-table thead th {
+  background: var(--fiori-bg);
+  color: var(--fiori-text-subtle);
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--fiori-border);
+}
+
+.fiori-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--fiori-border);
+  font-size: 14px;
+}
+
+.fiori-table tbody tr:hover {
+  background: #f5f9ff;
+}
+
+.fiori-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.fiori-panel {
+  background: var(--fiori-surface);
+  border: 1px solid var(--fiori-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.fiori-input {
+  border: 1px solid var(--fiori-border);
+  border-radius: 2px;
+  padding: 7px 10px;
+  font-size: 14px;
+  width: 100%;
+  background: #ffffff;
+}
+.fiori-input:focus {
+  outline: none;
+  border-color: var(--fiori-action);
+  box-shadow: 0 0 0 1px var(--fiori-action);
+}
+
+.fiori-label {
+  font-size: 12px;
+  color: var(--fiori-text-subtle);
+  margin-bottom: 4px;
+  display: block;
 }
