@@ -122,3 +122,20 @@ body {
   margin-bottom: 4px;
   display: block;
 }
+
+.fiori-shell-btn {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 12px;
+  cursor: pointer;
+}
+.fiori-shell-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.fiori-btn {
+  white-space: nowrap;
+}

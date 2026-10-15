@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -78,6 +78,9 @@ export default function EnterEventPage() {
   const [newVehicle, setNewVehicle] = useState<NewVehicleForm>(emptyNewVehicle);
   const [msaLicenseFile, setMsaLicenseFile] = useState<File | null>(null);
   const [popFile, setPopFile] = useState<File | null>(null);
+  const [bank, setBank] = useState<BankDetails | null>(null);
+  const [setupLoading, setSetupLoading] = useState(false);
+  const eventRef = useRef('');
 
   // Step 3 / submit state
   const [gcrAccepted, setGcrAccepted] = useState(false);
@@ -114,20 +117,51 @@ export default function EnterEventPage() {
     }
     setDriver(driverData);
 
-    const [vehiclesRes, eventsRes, classesRes, feesRes] = await Promise.all([
+    const [vehiclesRes, eventsRes] = await Promise.all([
       supabase.from('vehicles').select('*').eq('driver_id', driverData.id).order('created_at', { ascending: true }),
       supabase.from('events').select('*').eq('status', true).order('event_date', { ascending: true }),
-      supabase.from('race_classes').select('*').order('name', { ascending: true }),
-      supabase.from('entryFee').select('*').eq('is_active', true).order('description', { ascending: true }),
     ]);
 
     setVehicles(vehiclesRes.data ?? []);
     setEvents(eventsRes.data ?? []);
-    setRaceClasses(classesRes.data ?? []);
-    setEntryFees(feesRes.data ?? []);
     setLoading(false);
   }
+  function handleEventChange(id: string) {
+    eventRef.current = id;
+    setEventId(id);
+    setClassId('');
+    setFeeId('');
+    setRaceClasses([]);
+    setEntryFees([]);
+    setBank(null);
+    if (id) {
+      loadEventSetup(id);
+    } else {
+      setSetupLoading(false);
+    }
+  }
 
+  async function loadEventSetup(id: string) {
+    setSetupLoading(true);
+    const [classesRes, feesRes, bankRes] = await Promise.all([
+      supabase.from('race_classes').select('*').eq('event_id', id).order('name', { ascending: true }),
+      supabase
+        .from('entryFee')
+        .select('*')
+        .eq('event_id', id)
+        .eq('is_active', true)
+        .order('description', { ascending: true }),
+      supabase.from('bank_details').select('*').eq('event_id', id).maybeSingle(),
+    ]);
+
+    // The driver may have picked a different event while this was loading
+    if (eventRef.current !== id) return;
+
+    setRaceClasses(classesRes.data ?? []);
+    setEntryFees(feesRes.data ?? []);
+    setBank(bankRes.data ?? null);
+    setSetupLoading(false);
+  }
   const selectedEvent = events.find((e) => e.id === eventId);
   const selectedClass = raceClasses.find((c) => c.id.toString() === classId);
   const selectedFee = entryFees.find((f) => f.id.toString() === feeId);
@@ -175,6 +209,10 @@ export default function EnterEventPage() {
     if (!driver || !selectedEvent || !selectedClass || !selectedFee) return;
     if (!gcrAccepted) {
       setMessage({ type: 'negative', text: 'You must accept the GCR rules to submit your entry.' });
+      return;
+    }
+    if (!popFile) {
+      setMessage({ type: 'negative', text: 'Please attach your proof of payment before submitting.' });
       return;
     }
 
@@ -262,14 +300,19 @@ export default function EnterEventPage() {
       return;
     }
 
-    const { data: bank } = await supabase.from('bank_details').select('*').limit(1).maybeSingle<BankDetails>();
-
     let emailSent = false;
     let emailError: string | undefined;
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const res = await fetch('/api/send-entry-confirmation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
         body: JSON.stringify({
           to: driver.email,
           driverName: driver.full_name,
@@ -277,11 +320,10 @@ export default function EnterEventPage() {
           eventName: selectedEvent.name,
           className: selectedClass.name,
           vehicleDescription: vehicleDescription(),
-          totalDue: (selectedFee.fee ?? 0).toFixed(2),
           entryReference: payReference,
-          bank: bank ?? {},
         }),
       });
+
       const json = await res.json();
       if (!res.ok) {
         emailError = json.error ?? 'Email failed to send.';
@@ -381,11 +423,10 @@ export default function EnterEventPage() {
         {step === 2 && (
           <div className="fiori-panel rounded-sm p-8">
             <h2 className="text-lg font-semibold mb-6">2. Event & Vehicle Details</h2>
-
             <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
+              <div className="col-span-2">
                 <label className="fiori-label">Select Event *</label>
-                <select className="fiori-input" value={eventId} onChange={(e) => setEventId(e.target.value)}>
+                <select className="fiori-input" value={eventId} onChange={(e) => handleEventChange(e.target.value)}>
                   <option value="">— Select —</option>
                   {events.map((ev) => (
                     <option key={ev.id} value={ev.id}>
@@ -394,10 +435,18 @@ export default function EnterEventPage() {
                   ))}
                 </select>
               </div>
+
               <div>
                 <label className="fiori-label">Race Class *</label>
-                <select className="fiori-input" value={classId} onChange={(e) => setClassId(e.target.value)}>
-                  <option value="">— Select —</option>
+                <select
+                  className="fiori-input"
+                  value={classId}
+                  onChange={(e) => setClassId(e.target.value)}
+                  disabled={!eventId || setupLoading}
+                >
+                  <option value="">
+                    {!eventId ? 'Select an event first' : setupLoading ? 'Loading…' : '— Select —'}
+                  </option>
                   {raceClasses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -405,6 +454,25 @@ export default function EnterEventPage() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="fiori-label">Entry Category Fee Rate *</label>
+                <select
+                  className="fiori-input"
+                  value={feeId}
+                  onChange={(e) => setFeeId(e.target.value)}
+                  disabled={!eventId || setupLoading}
+                >
+                  <option value="">
+                    {!eventId ? 'Select an event first' : setupLoading ? 'Loading…' : '— Select —'}
+                  </option>
+                  {entryFees.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.description} (R{(f.fee ?? 0).toFixed(2)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="fiori-label">Race Number *</label>
                 <input
@@ -418,19 +486,14 @@ export default function EnterEventPage() {
                 <label className="fiori-label">Sponsor (optional)</label>
                 <input className="fiori-input" value={sponsor} onChange={(e) => setSponsor(e.target.value)} />
               </div>
-              <div className="col-span-2">
-                <label className="fiori-label">Entry Category Fee Rate *</label>
-                <select className="fiori-input" value={feeId} onChange={(e) => setFeeId(e.target.value)}>
-                  <option value="">— Select —</option>
-                  {entryFees.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.description} (R{(f.fee ?? 0).toFixed(2)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
 
+              {eventId && !setupLoading && (raceClasses.length === 0 || entryFees.length === 0) && (
+                <div className="col-span-2 text-sm" style={{ color: 'var(--fiori-negative)' }}>
+                  This event hasn&apos;t been fully set up yet (no race classes or entry fees). Please contact the
+                  club.
+                </div>
+              )}
+            </div>
             <div className="mb-2 text-sm font-semibold">Vehicle</div>
             <div className="flex gap-6 mb-4">
               <label className="flex items-center gap-2 text-sm">
@@ -523,7 +586,7 @@ export default function EnterEventPage() {
             )}
 
             <div className="mb-2 text-sm font-semibold">Documents</div>
-            <div className="mb-4">
+            <div className="mb-8">
               <label className="fiori-label">MSA Race Licence (PDF or photo)</label>
               <input
                 className="fiori-input"
@@ -535,18 +598,7 @@ export default function EnterEventPage() {
                 <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {msaLicenseFile.name}</div>
               )}
             </div>
-            <div className="mb-8">
-              <label className="fiori-label">Proof of Payment (PDF or photo)</label>
-              <input
-                className="fiori-input"
-                type="file"
-                accept="application/pdf,image/*"
-                onChange={(e) => setPopFile(e.target.files?.[0] ?? null)}
-              />
-              {popFile && (
-                <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {popFile.name}</div>
-              )}
-            </div>
+            
 
             <div className="flex justify-between">
               <button className="fiori-btn fiori-btn-ghost" onClick={() => setStep(1)}>
@@ -560,9 +612,9 @@ export default function EnterEventPage() {
           </div>
         )}
 
-        {step === 3 && selectedEvent && selectedClass && selectedFee && (
+                {step === 3 && selectedEvent && selectedClass && selectedFee && (
           <div className="fiori-panel rounded-sm p-8">
-            <h2 className="text-lg font-semibold mb-6">3. Review & Legal Declaration</h2>
+            <h2 className="text-lg font-semibold mb-6">3. Review, Payment & Declaration</h2>
 
             <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
               <div>
@@ -587,6 +639,64 @@ export default function EnterEventPage() {
               </div>
             </div>
 
+            <div className="mb-2 text-sm font-semibold">Payment</div>
+            <div className="mb-4 rounded-sm border p-4" style={{ background: 'var(--fiori-bg)' }}>
+              <div className="text-sm font-semibold text-[var(--fiori-action)] mb-3">
+                Total entry fee: R{(selectedFee.fee ?? 0).toFixed(2)}
+              </div>
+
+              {bank ? (
+                <table className="text-sm mb-3">
+                  <tbody>
+                    <tr>
+                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Bank</td>
+                      <td>{bank.bank_name ?? '—'}</td>
+                    </tr>
+                    <tr>
+                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Account name</td>
+                      <td>{bank.acc_name ?? '—'}</td>
+                    </tr>
+                    <tr>
+                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Account no.</td>
+                      <td>{bank.acc_number ?? '—'}</td>
+                    </tr>
+                    <tr>
+                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Branch code</td>
+                      <td>{bank.branch_code ?? '—'}</td>
+                    </tr>
+                    <tr>
+                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Payment reference</td>
+                      <td className="font-semibold">
+                        #{raceNumber.trim()} - {driver.full_name}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-sm text-[var(--fiori-text-subtle)] mb-3">
+                  Banking details are not available yet. Please contact the club.
+                </p>
+              )}
+
+              <p className="text-xs text-[var(--fiori-text-subtle)]">
+                Pay the total above using this reference, then attach your proof of payment below. Your entry is only
+                VALID once payment has been received and cleared by WPMC.
+              </p>
+            </div>
+
+            <div className="mb-6">
+              <label className="fiori-label">Proof of Payment (PDF or photo) *</label>
+              <input
+                className="fiori-input"
+                type="file"
+                accept="application/pdf,image/*"
+                onChange={(e) => setPopFile(e.target.files?.[0] ?? null)}
+              />
+              {popFile && (
+                <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {popFile.name}</div>
+              )}
+            </div>
+
             <div
               className="mb-4 px-4 py-3 text-sm rounded-sm border"
               style={{ background: '#fdf9ec', borderColor: '#f0d98a' }}
@@ -600,15 +710,6 @@ export default function EnterEventPage() {
               <input type="checkbox" checked={gcrAccepted} onChange={(e) => setGcrAccepted(e.target.checked)} />
               I accept the GCR rules and declare all details are accurate.
             </label>
-
-            <div className="mb-6 px-4 py-3 rounded-sm border" style={{ background: 'var(--fiori-bg)' }}>
-              <div className="text-sm font-semibold text-[var(--fiori-action)]">
-                Total Entry Fee Calculated: R{(selectedFee.fee ?? 0).toFixed(2)}
-              </div>
-              <div className="text-xs text-[var(--fiori-text-subtle)]">
-                Note: Entry is only VALID once payment has been received and cleared by WPMC.
-              </div>
-            </div>
 
             <div className="flex justify-between">
               <button className="fiori-btn fiori-btn-ghost" onClick={() => setStep(2)} disabled={submitting}>
@@ -634,8 +735,9 @@ export default function EnterEventPage() {
               </span>
             </p>
             <p className="text-sm text-[var(--fiori-text-subtle)] mb-4">
-              Your entry status is currently <strong>PENDING PAYMENT</strong>. Please proceed to payment to
-              finalize your event registration, using reference{' '}
+              Your entry and proof of payment have been received and will be reviewed by the club. Your entry
+              reference is <strong>{confirmation.payReference}</strong>. If anything further is needed, we will
+              contact you.
               <strong>{confirmation.payReference}</strong>.
             </p>
 

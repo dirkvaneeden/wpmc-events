@@ -4,6 +4,7 @@ export interface EntryFee {
   description: string | null;
   fee: number | null;
   is_active: boolean | null;
+  event_id: string;
 }
 
 export interface RaceEvent {
@@ -19,6 +20,7 @@ export interface RaceEvent {
 export interface RaceClass {
   id: number;
   name: string;
+  event_id: string;
 }
 
 export interface Driver {
@@ -59,6 +61,7 @@ export interface BankDetails {
   acc_number: string | null;
   branch_code: string | null;
   pop_email: string | null;
+  event_id: string;
 }
 
 export interface EventEntry {

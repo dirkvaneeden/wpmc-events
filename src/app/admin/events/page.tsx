@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { RaceEvent } from '@/lib/types';
 
@@ -19,6 +21,7 @@ interface EditForm {
 }
 
 export default function EventsPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<RaceEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -82,7 +85,7 @@ export default function EventsPage() {
       status: createForm.status,
     };
 
-    const { error } = await supabase.from('events').insert(payload);
+    const { data: created, error } = await supabase.from('events').insert(payload).select('id').single();
     setSaving(false);
 
     if (error) {
@@ -90,9 +93,9 @@ export default function EventsPage() {
       return;
     }
 
-    setMessage({ type: 'positive', text: 'Event created.' });
     setPanelOpen(false);
-    loadEvents();
+    // Go straight to the setup page to add classes, entry fees and bank details
+    router.push(`/admin/events/${created.id}`);
   }
 
   // --- Edit (inline row) ---
@@ -162,8 +165,7 @@ export default function EventsPage() {
 
   return (
     <div className="min-h-screen">
-      <div className="fiori-shell">Race Track Admin</div>
-
+    
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-end justify-between mb-6">
           <div>
@@ -283,7 +285,11 @@ export default function EventsPage() {
 
               return (
                 <tr key={row.id}>
-                  <td>{row.name}</td>
+                   <td>
+                    <Link href={`/admin/events/${row.id}`} className="text-[var(--fiori-action)] hover:underline">
+                      {row.name}
+                    </Link>
+                  </td>
                   <td>{new Date(row.event_date).toLocaleDateString()}</td>
                   <td>{new Date(row.late_entry_cutoff).toLocaleString()}</td>
                   <td>{row.gdrive_folder_id || '—'}</td>
@@ -295,6 +301,12 @@ export default function EventsPage() {
                     {row.status ? 'Active' : 'Inactive'}
                   </td>
                   <td style={{ textAlign: 'right' }}>
+                    <Link
+                      href={`/admin/events/${row.id}`}
+                      className="fiori-btn fiori-btn-ghost mr-2 inline-flex items-center"
+                    >
+                      Setup
+                    </Link>
                     <button className="fiori-btn fiori-btn-ghost mr-2" onClick={() => openRowEdit(row)}>
                       Edit
                     </button>
