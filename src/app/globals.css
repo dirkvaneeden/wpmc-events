@@ -1,15 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --fiori-shell: #354a5f;
-  --fiori-action: #0070f2;
-  --fiori-action-hover: #0058c9;
-  --fiori-bg: #f7f7f7;
+  /* Belize reference colours (SAP Fiori design guidelines) */
+  --belize-contrast-base: #3f5161; /* dark areas: shell bar */
+  --belize-brand: #427cac;
+  --belize-light-base: #eff4f9;
+
+  /* Names the pages already use, now pointing at Belize values */
+  --fiori-shell: var(--belize-contrast-base);
+  --fiori-action: #346187; /* Belize button text blue, passes contrast on white */
+  --fiori-action-hover: #2c4e6c;
+  --fiori-bg: #fafafa;
   --fiori-surface: #ffffff;
-  --fiori-border: #d9d9d9;
-  --fiori-text: #32363a;
-  --fiori-text-subtle: #6a6d70;
-  --fiori-positive: #107e3e;
+  --fiori-border: #bfbfbf;
+  --fiori-text: #333333;
+  --fiori-text-subtle: #666666;
+  --fiori-positive: #2b7d2b;
   --fiori-negative: #bb0000;
   --font-fiori: '72', '72full', Arial, Helvetica, sans-serif;
 }
@@ -33,96 +39,6 @@ body {
   letter-spacing: 0.01em;
 }
 
-.fiori-btn {
-  border-radius: 2px;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 6px 16px;
-  height: 34px;
-  cursor: pointer;
-  transition: background-color 0.1s ease;
-}
-
-.fiori-btn-emphasized {
-  background: var(--fiori-action);
-  color: #ffffff;
-  border: 1px solid var(--fiori-action);
-}
-.fiori-btn-emphasized:hover {
-  background: var(--fiori-action-hover);
-}
-
-.fiori-btn-ghost {
-  background: transparent;
-  color: var(--fiori-action);
-  border: 1px solid var(--fiori-border);
-}
-.fiori-btn-ghost:hover {
-  background: #f0f4ff;
-}
-
-.fiori-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--fiori-surface);
-  border: 1px solid var(--fiori-border);
-}
-
-.fiori-table thead th {
-  background: var(--fiori-bg);
-  color: var(--fiori-text-subtle);
-  text-align: left;
-  font-weight: 600;
-  font-size: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--fiori-border);
-}
-
-.fiori-table tbody td {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--fiori-border);
-  font-size: 14px;
-}
-
-.fiori-table tbody tr:hover {
-  background: #f5f9ff;
-}
-
-.fiori-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  margin-right: 6px;
-}
-
-.fiori-panel {
-  background: var(--fiori-surface);
-  border: 1px solid var(--fiori-border);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-
-.fiori-input {
-  border: 1px solid var(--fiori-border);
-  border-radius: 2px;
-  padding: 7px 10px;
-  font-size: 14px;
-  width: 100%;
-  background: #ffffff;
-}
-.fiori-input:focus {
-  outline: none;
-  border-color: var(--fiori-action);
-  box-shadow: 0 0 0 1px var(--fiori-action);
-}
-
-.fiori-label {
-  font-size: 12px;
-  color: var(--fiori-text-subtle);
-  margin-bottom: 4px;
-  display: block;
-}
-
 .fiori-shell-btn {
   background: transparent;
   color: #ffffff;
@@ -136,6 +52,110 @@ body {
 .fiori-shell-btn:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+
 .fiori-btn {
+  border-radius: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 16px;
+  height: 34px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
   white-space: nowrap;
+}
+.fiori-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fiori-btn-emphasized {
+  background: var(--fiori-action);
+  color: #ffffff;
+  border: 1px solid var(--fiori-action);
+}
+.fiori-btn-emphasized:hover:not(:disabled) {
+  background: var(--fiori-action-hover);
+  border-color: var(--fiori-action-hover);
+}
+
+.fiori-btn-ghost {
+  background: #f7f7f7;
+  color: var(--fiori-action);
+  border: 1px solid var(--fiori-border);
+}
+.fiori-btn-ghost:hover:not(:disabled) {
+  background: var(--belize-light-base);
+  border-color: var(--belize-brand);
+}
+
+/* Standard buttons placed on the dark shell bar stay transparent */
+.fiori-shell .fiori-btn-ghost {
+  background: transparent;
+}
+.fiori-shell .fiori-btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.fiori-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--fiori-surface);
+  border: 1px solid var(--fiori-border);
+}
+.fiori-table thead th {
+  background: var(--belize-light-base);
+  color: var(--fiori-text-subtle);
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--fiori-border);
+}
+.fiori-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  font-size: 14px;
+}
+.fiori-table tbody tr:hover {
+  background: var(--belize-light-base);
+}
+
+.fiori-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.fiori-panel {
+  background: var(--fiori-surface);
+  border: 1px solid #cccccc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.fiori-input {
+  border: 1px solid var(--fiori-border);
+  border-radius: 2px;
+  padding: 7px 10px;
+  font-size: 14px;
+  width: 100%;
+  background: #ffffff;
+  color: var(--fiori-text);
+}
+.fiori-input:focus {
+  outline: none;
+  border-color: var(--belize-brand);
+  box-shadow: 0 0 0 1px var(--belize-brand);
+}
+.fiori-input:disabled {
+  background: var(--belize-light-base);
+  color: var(--fiori-text-subtle);
+}
+
+.fiori-label {
+  font-size: 12px;
+  color: var(--fiori-text-subtle);
+  margin-bottom: 4px;
+  display: block;
 }

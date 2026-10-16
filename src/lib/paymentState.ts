@@ -1,8 +1,8 @@
 export type PaymentStateKey = 'AWAITING_POP' | 'POP_RECEIVED' | 'PAID';
 
 export const paymentStateMeta: Record<PaymentStateKey, { label: string; color: string }> = {
-  AWAITING_POP: { label: 'Awaiting POP', color: '#8a8d8f' },
-  POP_RECEIVED: { label: 'POP received', color: '#e9730c' },
+  AWAITING_POP: { label: 'Awaiting POP', color: '#5e696e' },
+  POP_RECEIVED: { label: 'POP received', color: '#e78c07' },
   PAID: { label: 'Paid', color: 'var(--fiori-positive)' },
 };
 

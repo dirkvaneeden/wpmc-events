@@ -30,7 +30,7 @@ export default function AdminNav({ adminName }: { adminName?: string }) {
             href={item.href}
             className={`inline-flex items-center px-3 text-sm whitespace-nowrap border-b-[3px] transition-colors ${
               isActive(item)
-                ? 'border-white font-semibold'
+                 ? 'border-[#91c8f6] font-semibold'
                 : 'border-transparent opacity-80 hover:opacity-100 hover:bg-white/10'
             }`}
           >
