@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { resolveDriverForSession } from '@/lib/driverAuth';
 import { Driver, Vehicle, RaceEvent, RaceClass, RaceSubclass, EntryFee, BankDetails } from '@/lib/types';
 import { uploadEntryDocument } from '@/lib/storage';
+import FileField from '@/components/FileField';
 
 
 function StepBar({ current }: { current: number }) {
@@ -679,17 +680,12 @@ export default function EnterEventPage() {
                 have them.
               </p>
             )}
-            <div className="mb-8">
-              <label className="fiori-label">MSA Race Licence (PDF or photo){docsRequired ? ' *' : ' (optional)'}</label>
-              <input
-                className="fiori-input"
-                type="file"
-                accept="application/pdf,image/*"
-                onChange={(e) => setMsaLicenseFile(e.target.files?.[0] ?? null)}
+                        <div className="mb-8">
+              <FileField
+                label={`MSA Race Licence (PDF or photo)${docsRequired ? ' *' : ' (optional)'}`}
+                file={msaLicenseFile}
+                onChange={setMsaLicenseFile}
               />
-              {msaLicenseFile && (
-                <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {msaLicenseFile.name}</div>
-              )}
             </div>
             
 
@@ -787,18 +783,12 @@ export default function EnterEventPage() {
             </div>
 
             <div className="mb-6">
-              <label className="fiori-label">
-                Proof of Payment (PDF or photo){popRequired ? ' *' : ' (optional)'}
-              </label>
-              <input
-                className="fiori-input"
-                type="file"
-                accept="application/pdf,image/*"
-                onChange={(e) => setPopFile(e.target.files?.[0] ?? null)}
+              <FileField
+                label={`Proof of Payment (PDF or photo)${popRequired ? ' *' : ' (optional)'}`}
+                file={popFile}
+                onChange={setPopFile}
               />
-              {popFile && (
-                <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {popFile.name}</div>
-              )}
+
             </div>
                         {docsRequired && (
               <>

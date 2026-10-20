@@ -6,6 +6,7 @@ export interface EntryFee {
   is_active: boolean | null;
   event_id: string;
   subclass_id: number | null;
+  captured_by: number | null;
 }
 
 export interface RaceEvent {

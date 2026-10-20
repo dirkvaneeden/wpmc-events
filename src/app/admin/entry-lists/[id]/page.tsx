@@ -47,6 +47,7 @@ interface EntryRow {
   } | null;
   race_classes: { name: string; no_documents_required: boolean } | null;
   race_subclasses: { name: string } | null;
+  admin_users: { full_name: string } | null;
   entryFee: { description: string | null; fee: number | null } | null;
   payments: PaymentRow[];
 }
@@ -112,6 +113,8 @@ export default function EventEntryListPage() {
           drivers(full_name, email, mobile, msa_licence_no, wpmc_member_no, emergency_contact, emergency_tel),
           vehicles(make, model, year, engine_make, capacity, cylinders),
           race_classes(name, no_documents_required),
+          admin_users(full_name),
+          race_subclasses(name),
           entryFee(description, fee),
           payments(id, amount_paid, payment_reference, pop_file_url, created_at)
         `
@@ -373,12 +376,20 @@ export default function EventEntryListPage() {
       </div>
       <div className="flex items-start justify-between gap-4">
         <h1 className="text-2xl font-semibold mb-1">{event.name}</h1>
-        <Link
-          href={`/admin/entry-lists/${event.id}/report`}
-          className="fiori-btn fiori-btn-emphasized inline-flex items-center"
-        >
-          Class report
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href={`/admin/entry-lists/${event.id}/add-entry`}
+            className="fiori-btn fiori-btn-emphasized inline-flex items-center"
+          >
+            + Add entry
+          </Link>
+          <Link
+            href={`/admin/entry-lists/${event.id}/report`}
+            className="fiori-btn fiori-btn-ghost inline-flex items-center"
+          >
+            Class report
+          </Link>
+        </div>
       </div>
       <div className="text-sm text-[var(--fiori-text-subtle)] mb-6">
         {new Date(event.event_date).toLocaleDateString()} ·{' '}
@@ -476,6 +487,15 @@ export default function EventEntryListPage() {
                 <tr style={isOpen ? { background: '#f5f9ff' } : undefined}>
                   <td>
                     <span className="font-semibold">#{entry.race_number}</span>
+                    {entry.admin_users && (
+                      <span
+                        className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm"
+                        style={{ background: '#eff4f9', color: 'var(--fiori-action)' }}
+                        title={`Captured by ${entry.admin_users.full_name}`}
+                      >
+                        ADMIN
+                      </span>
+                    )}
                     {entry.is_late_entry && (
                       <span
                         className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm"
@@ -584,6 +604,9 @@ export default function EventEntryListPage() {
                           <Field label="Sub class">{entry.race_subclasses?.name}</Field>
                           <Field label="Sponsor">{entry.sponsor}</Field>
                           <Field label="Payment reference">{entry.pay_reference}</Field>
+                          <Field label="Captured by">
+                            {entry.admin_users ? `${entry.admin_users.full_name} (club admin)` : 'Competitor'}
+                          </Field>
                           <Field label="Late entry">{entry.is_late_entry ? 'Yes' : 'No'}</Field>
                           <Field label="GCR accepted">
                             {entry.gcr_accepted ? 'Yes' : entry.race_classes?.no_documents_required ? 'Not required' : 'No'}
