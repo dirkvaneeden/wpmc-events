@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Driver, Vehicle } from '@/lib/types';
+import { getPaymentState, paymentStateMeta } from '@/lib/paymentState';
 import Link from 'next/link';
 
 interface DriverForm {
@@ -30,6 +31,19 @@ interface VehicleForm {
   cylinders: string;
 }
 
+interface HistoryRow {
+  id: string;
+  vehicle_id: string;
+  race_number: string;
+  fee_amount: number;
+  status: string;
+  pop_url_driver: string | null;
+  events: { name: string; event_date: string } | null;
+  race_classes: { name: string } | null;
+  race_subclasses: { name: string } | null;
+  vehicles: { make: string; model: string; year: number } | null;
+}
+
 const emptyVehicleForm: VehicleForm = {
   make: '',
   model: '',
@@ -44,6 +58,7 @@ export default function MyProfilePage() {
   const [loading, setLoading] = useState(true);
   const [driver, setDriver] = useState<Driver | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [history, setHistory] = useState<HistoryRow[]>([]);
 
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<DriverForm | null>(null);
@@ -93,7 +108,28 @@ export default function MyProfilePage() {
       .eq('driver_id', driverData.id)
       .order('created_at', { ascending: true });
 
-    setVehicles(vehiclesData ?? []);
+      setVehicles(vehiclesData ?? []);
+
+    const { data: historyData } = await supabase
+      .from('event_entries')
+      .select(
+        `
+        id, vehicle_id, race_number, fee_amount, status, pop_url_driver,
+        events(name, event_date),
+        race_classes(name),
+        race_subclasses(name),
+        vehicles(make, model, year)
+      `
+      )
+      .eq('driver_id', driverData.id);
+
+    const historyRows = ((historyData ?? []) as unknown as HistoryRow[]).slice();
+    historyRows.sort(
+      (a, b) =>
+        (b.events?.event_date ?? '').localeCompare(a.events?.event_date ?? '') ||
+        a.race_number.localeCompare(b.race_number, undefined, { numeric: true })
+    );
+    setHistory(historyRows);
     setLoading(false);
   }
 
@@ -240,6 +276,14 @@ export default function MyProfilePage() {
   }
 
   async function handleDeleteVehicle(row: Vehicle) {
+    const used = history.filter((h) => h.vehicle_id === row.id).length;
+    if (used > 0) {
+      setMessage({
+        type: 'negative',
+        text: `This vehicle is used in ${used} event ${used === 1 ? 'entry' : 'entries'}, so it can't be deleted.`,
+      });
+      return;
+    }
     if (!confirm(`Delete ${row.year} ${row.make} ${row.model}?`)) return;
     const { error } = await supabase.from('vehicles').delete().eq('id', row.id);
     if (error) {
@@ -425,6 +469,72 @@ export default function MyProfilePage() {
                     >
                       Delete
                     </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-6 pb-12">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">Event history</h2>
+          <p className="text-sm text-[var(--fiori-text-subtle)]">
+            Every event you&apos;ve entered, newest first. Events that haven&apos;t happened yet are marked Upcoming.
+          </p>
+        </div>
+
+        <table className="fiori-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Event</th>
+              <th>Class</th>
+              <th>Vehicle</th>
+              <th>Race #</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center text-[var(--fiori-text-subtle)] py-6">
+                  You haven&apos;t entered any events yet.{' '}
+                  <Link href="/enter-event" className="text-[var(--fiori-action)] hover:underline">
+                    Enter an event
+                  </Link>
+                </td>
+              </tr>
+            )}
+            {history.map((h) => {
+              const upcoming = (h.events?.event_date ?? '') >= new Date().toLocaleDateString('en-CA');
+              const meta = paymentStateMeta[getPaymentState(h.status, h.pop_url_driver, h.fee_amount)];
+              return (
+                <tr key={h.id}>
+                  <td>{h.events ? new Date(h.events.event_date).toLocaleDateString() : '—'}</td>
+                  <td>
+                    {h.events?.name ?? '—'}
+                    {upcoming && (
+                      <span
+                        className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm"
+                        style={{ background: '#eff4f9', color: 'var(--fiori-action)' }}
+                      >
+                        UPCOMING
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {h.race_classes?.name ?? '—'}
+                    {h.race_subclasses && (
+                      <div className="text-xs text-[var(--fiori-text-subtle)]">{h.race_subclasses.name}</div>
+                    )}
+                  </td>
+                  <td>{h.vehicles ? `${h.vehicles.year} ${h.vehicles.make} ${h.vehicles.model}` : '—'}</td>
+                  <td>#{h.race_number}</td>
+                  <td>
+                    <span className="fiori-status-dot" style={{ background: meta.color }} />
+                    {meta.label}
                   </td>
                 </tr>
               );

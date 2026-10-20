@@ -5,6 +5,7 @@ export const REPORT_SELECT = `
   drivers(full_name, email, mobile, msa_licence_no, wpmc_member_no),
   vehicles(make, model, year),
   race_classes(name),
+  race_subclasses(name),
   entryFee(description),
   payments(amount_paid)
 `;
@@ -26,6 +27,7 @@ export interface ReportEntry {
   } | null;
   vehicles: { make: string; model: string; year: number } | null;
   race_classes: { name: string } | null;
+  race_subclasses: { name: string } | null;
   entryFee: { description: string | null } | null;
   payments: { amount_paid: number }[];
 }
@@ -60,7 +62,11 @@ export function groupByClass(entries: ReportEntry[]): ClassGroup[] {
 
   const groups = Array.from(map.values()).sort((a, b) => a.className.localeCompare(b.className));
   for (const g of groups) {
-    g.entries.sort((a, b) => a.race_number.localeCompare(b.race_number, undefined, { numeric: true }));
+    g.entries.sort(
+      (a, b) =>
+        (a.race_subclasses?.name ?? '').localeCompare(b.race_subclasses?.name ?? '') ||
+        a.race_number.localeCompare(b.race_number, undefined, { numeric: true })
+    );
   }
   return groups;
 }

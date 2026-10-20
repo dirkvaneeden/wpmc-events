@@ -167,6 +167,7 @@ export default function ClassReportPage() {
                 <th style={{ width: 110 }}>Race #</th>
                 <th>Driver</th>
                 <th>Vehicle</th>
+                <th>Sub class</th>
                 <th>Sponsor</th>
                 <th>Fee rate</th>
                 <th>Payment</th>
@@ -190,6 +191,7 @@ export default function ClassReportPage() {
                     </td>
                     <td>{e.drivers?.full_name ?? '—'}</td>
                     <td>{vehicleText(e.vehicles) || '—'}</td>
+                    <td>{e.race_subclasses?.name ?? '—'}</td>
                     <td>{e.sponsor || '—'}</td>
                     <td>{e.entryFee?.description ?? '—'}</td>
                     <td>

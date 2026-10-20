@@ -5,6 +5,7 @@ export interface EntryFee {
   fee: number | null;
   is_active: boolean | null;
   event_id: string;
+  subclass_id: number | null;
 }
 
 export interface RaceEvent {
@@ -22,6 +23,12 @@ export interface RaceClass {
   name: string;
   event_id: string;
   no_documents_required: boolean;
+}
+
+export interface RaceSubclass {
+  id: number;
+  class_id: number;
+  name: string;
 }
 
 export interface Driver {

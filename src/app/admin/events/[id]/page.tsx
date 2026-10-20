@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { RaceEvent, RaceClass, EntryFee, BankDetails } from '@/lib/types';
+import { RaceEvent, RaceClass, RaceSubclass, EntryFee, BankDetails } from '@/lib/types';
 
 type Notify = (type: 'positive' | 'negative', text: string) => void;
 
@@ -24,6 +24,7 @@ function parseFee(value: string): number | null {
 
 function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
   const [rows, setRows] = useState<RaceClass[]>([]);
+  const [subs, setSubs] = useState<RaceSubclass[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
   const [newNoDocs, setNewNoDocs] = useState(false);
@@ -33,6 +34,14 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
   const [editNoDocs, setEditNoDocs] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Sub classes (one class panel is open at a time)
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [newSubName, setNewSubName] = useState('');
+  const [addingSub, setAddingSub] = useState(false);
+  const [editingSubId, setEditingSubId] = useState<number | null>(null);
+  const [editSubName, setEditSubName] = useState('');
+  const [savingSub, setSavingSub] = useState(false);
+
   async function load() {
     setLoading(true);
     const { data, error } = await supabase
@@ -41,8 +50,30 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
       .eq('event_id', eventId)
       .order('name', { ascending: true });
 
-    if (error) notify('negative', `Couldn't load race classes: ${error.message}`);
-    else setRows(data ?? []);
+    if (error) {
+      notify('negative', `Couldn't load race classes: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+
+    const classes: RaceClass[] = data ?? [];
+    setRows(classes);
+
+    if (classes.length === 0) {
+      setSubs([]);
+    } else {
+      const subsRes = await supabase
+        .from('race_subclasses')
+        .select('*')
+        .in(
+          'class_id',
+          classes.map((c) => c.id)
+        )
+        .order('name', { ascending: true });
+
+      if (subsRes.error) notify('negative', `Couldn't load sub classes: ${subsRes.error.message}`);
+      else setSubs(subsRes.data ?? []);
+    }
     setLoading(false);
   }
 
@@ -50,6 +81,8 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, reloadKey]);
+
+  const subsFor = (classId: number) => subs.filter((s) => s.class_id === classId);
 
   async function handleAdd() {
     const name = newName.trim();
@@ -102,7 +135,10 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
   }
 
   async function handleDelete(row: RaceClass) {
-    if (!confirm(`Delete the class "${row.name}" from this event?`)) return;
+    const count = subsFor(row.id).length;
+    const extra = count > 0 ? ` and its ${count} sub class${count === 1 ? '' : 'es'}` : '';
+    if (!confirm(`Delete the class "${row.name}"${extra} from this event?`)) return;
+
     const { error } = await supabase.from('race_classes').delete().eq('id', row.id);
 
     if (error) {
@@ -118,12 +154,80 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
     load();
   }
 
+  function toggleOpen(id: number) {
+    setOpenId((cur) => (cur === id ? null : id));
+    setNewSubName('');
+    setEditingSubId(null);
+  }
+
+  async function handleAddSub(classId: number) {
+    const name = newSubName.trim();
+    if (!name) {
+      notify('negative', 'Sub class name is required.');
+      return;
+    }
+    setAddingSub(true);
+    const { error } = await supabase.from('race_subclasses').insert({ class_id: classId, name });
+    setAddingSub(false);
+
+    if (error) {
+      notify(
+        'negative',
+        error.code === '23505' ? 'That sub class already exists for this class.' : `Save failed: ${error.message}`
+      );
+      return;
+    }
+    setNewSubName('');
+    notify('positive', 'Sub class added.');
+    load();
+  }
+
+  async function handleSaveSub(id: number) {
+    const name = editSubName.trim();
+    if (!name) {
+      notify('negative', 'Sub class name is required.');
+      return;
+    }
+    setSavingSub(true);
+    const { error } = await supabase.from('race_subclasses').update({ name }).eq('id', id);
+    setSavingSub(false);
+
+    if (error) {
+      notify(
+        'negative',
+        error.code === '23505' ? 'That sub class already exists for this class.' : `Save failed: ${error.message}`
+      );
+      return;
+    }
+    setEditingSubId(null);
+    notify('positive', 'Sub class updated.');
+    load();
+  }
+
+  async function handleDeleteSub(sub: RaceSubclass) {
+    if (!confirm(`Delete the sub class "${sub.name}"?`)) return;
+    const { error } = await supabase.from('race_subclasses').delete().eq('id', sub.id);
+
+    if (error) {
+      notify(
+        'negative',
+        error.code === '23503'
+          ? "Drivers have already entered this sub class, so it can't be deleted."
+          : `Delete failed: ${error.message}`
+      );
+      return;
+    }
+    notify('positive', 'Sub class deleted.');
+    load();
+  }
+
   return (
     <section className="mb-10">
       <h2 className="text-lg font-semibold mb-1">Race classes</h2>
       <p className="text-sm text-[var(--fiori-text-subtle)] mb-3">
-        The classes drivers can enter for this event. Tick &quot;No documentation required&quot; for classes where the
-        MSA licence and proof of payment are optional and the GCR rules declaration is not shown.
+        The classes drivers can enter for this event. Open a class&apos;s sub classes to add them, and drivers must then
+        pick one when they enter that class. Tick &quot;No documentation required&quot; for classes where the MSA licence
+        and proof of payment are optional and the GCR rules declaration is not shown.
       </p>
 
       <div className="flex flex-wrap items-center gap-3 mb-3 max-w-3xl">
@@ -148,6 +252,7 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
         <thead>
           <tr>
             <th>Name</th>
+            <th>Sub classes</th>
             <th>Documents</th>
             <th style={{ textAlign: 'right' }}>Actions</th>
           </tr>
@@ -155,90 +260,200 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
         <tbody>
           {loading && (
             <tr>
-              <td colSpan={3} className="text-center text-[var(--fiori-text-subtle)] py-6">
+              <td colSpan={4} className="text-center text-[var(--fiori-text-subtle)] py-6">
                 Loading…
               </td>
             </tr>
           )}
           {!loading && rows.length === 0 && (
             <tr>
-              <td colSpan={3} className="text-center text-[var(--fiori-text-subtle)] py-6">
+              <td colSpan={4} className="text-center text-[var(--fiori-text-subtle)] py-6">
                 No race classes yet for this event.
               </td>
             </tr>
           )}
-          {rows.map((row) =>
-            editingId === row.id ? (
-              <tr key={row.id} style={{ background: '#eff4f9' }}>
-                <td>
-                  <input
-                    className="fiori-input"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit(row.id)}
-                    autoFocus
-                  />
-                </td>
-                <td>
-                  <label className="flex items-center gap-2 text-sm whitespace-nowrap">
-                    <input type="checkbox" checked={editNoDocs} onChange={(e) => setEditNoDocs(e.target.checked)} />
-                    No documentation required
-                  </label>
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <button
-                    className="fiori-btn fiori-btn-ghost mr-2"
-                    onClick={() => setEditingId(null)}
-                    disabled={savingEdit}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="fiori-btn fiori-btn-emphasized"
-                    onClick={() => handleSaveEdit(row.id)}
-                    disabled={savingEdit}
-                  >
-                    {savingEdit ? 'Saving…' : 'Save'}
-                  </button>
-                </td>
-              </tr>
-            ) : (
-              <tr key={row.id}>
-                <td>{row.name}</td>
-                <td>
-                  {row.no_documents_required ? (
-                    <span
-                      className="text-xs font-semibold px-2 py-0.5 rounded-sm"
-                      style={{ background: '#eff4f9', color: 'var(--fiori-action)' }}
+          {rows.map((row) => {
+            if (editingId === row.id) {
+              return (
+                <tr key={row.id} style={{ background: '#eff4f9' }}>
+                  <td>
+                    <input
+                      className="fiori-input"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit(row.id)}
+                      autoFocus
+                    />
+                  </td>
+                  <td className="text-[var(--fiori-text-subtle)]">{subsFor(row.id).length || '—'}</td>
+                  <td>
+                    <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                      <input type="checkbox" checked={editNoDocs} onChange={(e) => setEditNoDocs(e.target.checked)} />
+                      No documentation required
+                    </label>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="fiori-btn fiori-btn-ghost mr-2"
+                      onClick={() => setEditingId(null)}
+                      disabled={savingEdit}
                     >
-                      Not required
-                    </span>
-                  ) : (
-                    'Required'
-                  )}
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <button
-                    className="fiori-btn fiori-btn-ghost mr-2"
-                    onClick={() => {
-                      setEditingId(row.id);
-                      setEditName(row.name);
-                      setEditNoDocs(row.no_documents_required ?? false);
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="fiori-btn fiori-btn-ghost"
-                    style={{ color: 'var(--fiori-negative)' }}
-                    onClick={() => handleDelete(row)}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            )
-          )}
+                      Cancel
+                    </button>
+                    <button
+                      className="fiori-btn fiori-btn-emphasized"
+                      onClick={() => handleSaveEdit(row.id)}
+                      disabled={savingEdit}
+                    >
+                      {savingEdit ? 'Saving…' : 'Save'}
+                    </button>
+                  </td>
+                </tr>
+              );
+            }
+
+            const classSubs = subsFor(row.id);
+            const isOpen = openId === row.id;
+
+            return (
+              <Fragment key={row.id}>
+                <tr style={isOpen ? { background: '#eff4f9' } : undefined}>
+                  <td>{row.name}</td>
+                  <td>
+                    <button
+                      className="text-[var(--fiori-action)] hover:underline text-sm"
+                      onClick={() => toggleOpen(row.id)}
+                    >
+                      {classSubs.length === 0
+                        ? '+ Add sub classes'
+                        : `${classSubs.length} sub class${classSubs.length === 1 ? '' : 'es'}`}{' '}
+                      {isOpen ? '▴' : '▾'}
+                    </button>
+                    {classSubs.length > 0 && !isOpen && (
+                      <div className="text-xs text-[var(--fiori-text-subtle)]">
+                        {classSubs.map((s) => s.name).join(', ')}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {row.no_documents_required ? (
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-sm"
+                        style={{ background: '#eff4f9', color: 'var(--fiori-action)' }}
+                      >
+                        Not required
+                      </span>
+                    ) : (
+                      'Required'
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="fiori-btn fiori-btn-ghost mr-2"
+                      onClick={() => {
+                        setEditingId(row.id);
+                        setEditName(row.name);
+                        setEditNoDocs(row.no_documents_required ?? false);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="fiori-btn fiori-btn-ghost"
+                      style={{ color: 'var(--fiori-negative)' }}
+                      onClick={() => handleDelete(row)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+
+                {isOpen && (
+                  <tr style={{ background: '#fafafa' }}>
+                    <td colSpan={4} style={{ padding: '16px 24px' }}>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--fiori-text-subtle)] mb-2">
+                        Sub classes of {row.name}
+                      </div>
+
+                      {classSubs.length === 0 ? (
+                        <p className="text-sm text-[var(--fiori-text-subtle)] mb-3">
+                          No sub classes yet. Drivers entering this class won&apos;t be asked to pick one.
+                        </p>
+                      ) : (
+                        <div className="mb-3">
+                          {classSubs.map((s) =>
+                            editingSubId === s.id ? (
+                              <div key={s.id} className="flex items-center gap-2 mb-2">
+                                <input
+                                  className="fiori-input"
+                                  style={{ width: 240 }}
+                                  value={editSubName}
+                                  onChange={(e) => setEditSubName(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && handleSaveSub(s.id)}
+                                  autoFocus
+                                />
+                                <button
+                                  className="fiori-btn fiori-btn-ghost"
+                                  onClick={() => setEditingSubId(null)}
+                                  disabled={savingSub}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  className="fiori-btn fiori-btn-emphasized"
+                                  onClick={() => handleSaveSub(s.id)}
+                                  disabled={savingSub}
+                                >
+                                  {savingSub ? 'Saving…' : 'Save'}
+                                </button>
+                              </div>
+                            ) : (
+                              <div key={s.id} className="flex items-center gap-4 py-1 text-sm">
+                                <span style={{ minWidth: 220 }}>{s.name}</span>
+                                <button
+                                  className="text-[var(--fiori-action)] hover:underline"
+                                  onClick={() => {
+                                    setEditingSubId(s.id);
+                                    setEditSubName(s.name);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="hover:underline"
+                                  style={{ color: 'var(--fiori-negative)' }}
+                                  onClick={() => handleDeleteSub(s)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 max-w-md">
+                        <input
+                          className="fiori-input"
+                          value={newSubName}
+                          onChange={(e) => setNewSubName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddSub(row.id)}
+                          placeholder="e.g. Over 2000cc"
+                        />
+                        <button
+                          className="fiori-btn fiori-btn-emphasized whitespace-nowrap"
+                          onClick={() => handleAddSub(row.id)}
+                          disabled={addingSub}
+                        >
+                          {addingSub ? 'Adding…' : '+ Add Sub Class'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </section>
@@ -616,7 +831,7 @@ function BankSection({ eventId, reloadKey, notify }: SectionProps) {
   );
 }
 
-/* ---------------- Copy from another event ---------------- */
+/* ---------------- /* ---------------- Copy from another event ---------------- */
 
 function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: () => void; notify: Notify }) {
   const [others, setOthers] = useState<Pick<RaceEvent, 'id' | 'name' | 'event_date'>[]>([]);
@@ -639,7 +854,7 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
     if (!sourceId) return;
     if (
       !confirm(
-        'Copy race classes, entry fees and bank details from that event? Anything this event already has is kept.'
+        'Copy race classes (with their sub classes), entry fees and bank details from that event? Anything this event already has is kept.'
       )
     )
       return;
@@ -647,10 +862,10 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
     setCopying(true);
     try {
       const results = await Promise.all([
-        supabase.from('race_classes').select('name, no_documents_required').eq('event_id', sourceId),
+        supabase.from('race_classes').select('id, name, no_documents_required').eq('event_id', sourceId),
         supabase.from('entryFee').select('description, fee, is_active').eq('event_id', sourceId),
         supabase.from('bank_details').select('*').eq('event_id', sourceId).maybeSingle(),
-        supabase.from('race_classes').select('name').eq('event_id', eventId),
+        supabase.from('race_classes').select('id, name').eq('event_id', eventId),
         supabase.from('entryFee').select('description, fee').eq('event_id', eventId),
         supabase.from('bank_details').select('id').eq('event_id', eventId).maybeSingle(),
       ]);
@@ -659,25 +874,76 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
 
       const [srcClasses, srcFees, srcBank, haveClasses, haveFees, haveBank] = results;
 
+      // Classes
       const existingClassNames = new Set((haveClasses.data ?? []).map((c) => c.name.toLowerCase()));
       const newClasses = (srcClasses.data ?? [])
         .filter((c) => !existingClassNames.has(c.name.toLowerCase()))
         .map((c) => ({ name: c.name, no_documents_required: c.no_documents_required, event_id: eventId }));
 
+      if (newClasses.length > 0) {
+        const { error } = await supabase.from('race_classes').insert(newClasses);
+        if (error) throw error;
+      }
+
+      // Sub classes, matched to the target event's classes by class name
+      let newSubCount = 0;
+      const sourceClassIds = (srcClasses.data ?? []).map((c) => c.id);
+      if (sourceClassIds.length > 0) {
+        const [srcSubsRes, targetClassesRes] = await Promise.all([
+          supabase.from('race_subclasses').select('class_id, name').in('class_id', sourceClassIds),
+          supabase.from('race_classes').select('id, name').eq('event_id', eventId),
+        ]);
+        if (srcSubsRes.error) throw srcSubsRes.error;
+        if (targetClassesRes.error) throw targetClassesRes.error;
+
+        const srcNameById = new Map<number, string>(
+          (srcClasses.data ?? []).map((c) => [c.id, c.name.toLowerCase()] as [number, string])
+        );
+        const targetIdByName = new Map<string, number>(
+          (targetClassesRes.data ?? []).map((c) => [c.name.toLowerCase(), c.id] as [string, number])
+        );
+
+        const targetClassIds = (targetClassesRes.data ?? []).map((c) => c.id);
+        let haveSubs: { class_id: number; name: string }[] = [];
+        if (targetClassIds.length > 0) {
+          const { data, error } = await supabase
+            .from('race_subclasses')
+            .select('class_id, name')
+            .in('class_id', targetClassIds);
+          if (error) throw error;
+          haveSubs = data ?? [];
+        }
+
+        const haveKeys = new Set(haveSubs.map((s) => `${s.class_id}|${s.name.toLowerCase()}`));
+        const newSubs: { class_id: number; name: string }[] = [];
+        for (const s of srcSubsRes.data ?? []) {
+          const targetClassId = targetIdByName.get(srcNameById.get(s.class_id) ?? '');
+          if (!targetClassId) continue;
+          const key = `${targetClassId}|${s.name.toLowerCase()}`;
+          if (haveKeys.has(key)) continue;
+          haveKeys.add(key);
+          newSubs.push({ class_id: targetClassId, name: s.name });
+        }
+
+        if (newSubs.length > 0) {
+          const { error } = await supabase.from('race_subclasses').insert(newSubs);
+          if (error) throw error;
+        }
+        newSubCount = newSubs.length;
+      }
+
+      // Entry fees
       const existingFees = new Set((haveFees.data ?? []).map((f) => `${f.description}|${f.fee}`));
       const newFees = (srcFees.data ?? [])
         .filter((f) => !existingFees.has(`${f.description}|${f.fee}`))
         .map((f) => ({ description: f.description, fee: f.fee, is_active: f.is_active, event_id: eventId }));
 
-      if (newClasses.length > 0) {
-        const { error } = await supabase.from('race_classes').insert(newClasses);
-        if (error) throw error;
-      }
       if (newFees.length > 0) {
         const { error } = await supabase.from('entryFee').insert(newFees);
         if (error) throw error;
       }
 
+      // Bank details
       let bankCopied = false;
       if (srcBank.data && !haveBank.data) {
         const b = srcBank.data;
@@ -695,7 +961,7 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
 
       notify(
         'positive',
-        `Copied ${newClasses.length} class(es) and ${newFees.length} entry fee(s)${bankCopied ? ', plus the bank details' : ''}.`
+        `Copied ${newClasses.length} class(es), ${newSubCount} sub class(es) and ${newFees.length} entry fee(s)${bankCopied ? ', plus the bank details' : ''}.`
       );
       setSourceId('');
       onCopied();
@@ -709,7 +975,8 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
     <div className="fiori-panel rounded-sm p-4 mb-8">
       <div className="text-sm font-semibold mb-1">Copy setup from another event</div>
       <p className="text-xs text-[var(--fiori-text-subtle)] mb-3">
-        Saves retyping: copies race classes, entry fees and bank details. Anything already set up here is kept.
+        Saves retyping: copies race classes (with their sub classes), entry fees and bank details. Anything already set
+        up here is kept.
       </p>
       <div className="flex gap-2 max-w-xl">
         <select className="fiori-input" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
@@ -731,7 +998,6 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
     </div>
   );
 }
-
 /* ---------------- Page ---------------- */
 
 export default function EventSetupPage() {

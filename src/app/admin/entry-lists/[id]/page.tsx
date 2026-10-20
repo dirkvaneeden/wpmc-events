@@ -46,6 +46,7 @@ interface EntryRow {
     cylinders: number;
   } | null;
   race_classes: { name: string; no_documents_required: boolean } | null;
+  race_subclasses: { name: string } | null;
   entryFee: { description: string | null; fee: number | null } | null;
   payments: PaymentRow[];
 }
@@ -491,7 +492,12 @@ export default function EventEntryListPage() {
                   <td>
                     {entry.vehicles ? `${entry.vehicles.year} ${entry.vehicles.make} ${entry.vehicles.model}` : '—'}
                   </td>
-                  <td>{entry.race_classes?.name ?? '—'}</td>
+                  <td>
+                    {entry.race_classes?.name ?? '—'}
+                    {entry.race_subclasses && (
+                      <div className="text-xs text-[var(--fiori-text-subtle)]">{entry.race_subclasses.name}</div>
+                    )}
+                  </td>
                   <td>
                     {entry.entryFee?.description ?? '—'}
                     <div className="text-xs text-[var(--fiori-text-subtle)]">{money(entry.fee_amount)}</div>
@@ -575,6 +581,7 @@ export default function EventEntryListPage() {
                           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--fiori-text-subtle)] mb-2">
                             Entry
                           </div>
+                          <Field label="Sub class">{entry.race_subclasses?.name}</Field>
                           <Field label="Sponsor">{entry.sponsor}</Field>
                           <Field label="Payment reference">{entry.pay_reference}</Field>
                           <Field label="Late entry">{entry.is_late_entry ? 'Yes' : 'No'}</Field>

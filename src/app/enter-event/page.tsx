@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { resolveDriverForSession } from '@/lib/driverAuth';
-import { Driver, Vehicle, RaceEvent, RaceClass, EntryFee, BankDetails } from '@/lib/types';
+import { Driver, Vehicle, RaceEvent, RaceClass, RaceSubclass, EntryFee, BankDetails } from '@/lib/types';
 import { uploadEntryDocument } from '@/lib/storage';
 
 
@@ -34,6 +34,15 @@ function StepBar({ current }: { current: number }) {
       })}
     </div>
   );
+}
+
+interface ClassListRow {
+  race_number: string;
+  driver_name: string;
+  vehicle: string;
+  subclass_name: string | null;
+  is_you: boolean;
+  confirmed: boolean;
 }
 
 interface NewVehicleForm {
@@ -80,6 +89,10 @@ export default function EnterEventPage() {
   const [popFile, setPopFile] = useState<File | null>(null);
   const [bank, setBank] = useState<BankDetails | null>(null);
   const [setupLoading, setSetupLoading] = useState(false);
+  const [subclasses, setSubclasses] = useState<RaceSubclass[]>([]);
+  const [subclassId, setSubclassId] = useState('');
+  const [classList, setClassList] = useState<ClassListRow[] | null>(null);
+  const [classListError, setClassListError] = useState<string | null>(null);
   const eventRef = useRef('');
 
   // Step 3 / submit state
@@ -126,12 +139,14 @@ export default function EnterEventPage() {
     setEvents(eventsRes.data ?? []);
     setLoading(false);
   }
-  function handleEventChange(id: string) {
+    function handleEventChange(id: string) {
     eventRef.current = id;
     setEventId(id);
     setClassId('');
+    setSubclassId('');
     setFeeId('');
     setRaceClasses([]);
+    setSubclasses([]);
     setEntryFees([]);
     setBank(null);
     if (id) {
@@ -157,13 +172,51 @@ export default function EnterEventPage() {
     // The driver may have picked a different event while this was loading
     if (eventRef.current !== id) return;
 
-    setRaceClasses(classesRes.data ?? []);
+    const classes: RaceClass[] = classesRes.data ?? [];
+    let subs: RaceSubclass[] = [];
+    if (classes.length > 0) {
+      const subsRes = await supabase
+        .from('race_subclasses')
+        .select('*')
+        .in(
+          'class_id',
+          classes.map((c) => c.id)
+        )
+        .order('name', { ascending: true });
+      if (eventRef.current !== id) return;
+      subs = subsRes.data ?? [];
+    }
+
+    setRaceClasses(classes);
+    setSubclasses(subs);
     setEntryFees(feesRes.data ?? []);
     setBank(bankRes.data ?? null);
     setSetupLoading(false);
   }
+
+  async function loadClassList(entryId: string) {
+    setClassList(null);
+    setClassListError(null);
+
+    const { data, error } = await supabase.rpc('class_entry_list', { p_entry_id: entryId });
+    if (error) {
+      setClassListError(error.message);
+      return;
+    }
+
+    const rows = ((data ?? []) as ClassListRow[])
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.subclass_name ?? '').localeCompare(b.subclass_name ?? '') ||
+          a.race_number.localeCompare(b.race_number, undefined, { numeric: true })
+      );
+    setClassList(rows);
+  }
   const selectedEvent = events.find((e) => e.id === eventId);
   const selectedClass = raceClasses.find((c) => c.id.toString() === classId);
+  const classSubclasses = subclasses.filter((s) => s.class_id.toString() === classId);
+  const selectedSubclass = classSubclasses.find((s) => s.id.toString() === subclassId);
   const selectedFee = entryFees.find((f) => f.id.toString() === feeId);
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
   // Documents are required unless the chosen class is flagged otherwise
@@ -196,6 +249,10 @@ export default function EnterEventPage() {
   function handleNextFromStep2() {
     if (!eventId || !classId || !raceNumber.trim() || !feeId) {
       setMessage({ type: 'negative', text: 'Please complete all required fields.' });
+      return;
+    }
+       if (classSubclasses.length > 0 && !subclassId) {
+      setMessage({ type: 'negative', text: 'Please select a sub class.' });
       return;
     }
     if (vehicleMode === 'existing' && !vehicleId) {
@@ -299,6 +356,7 @@ export default function EnterEventPage() {
         pay_reference: payReference,
         msa_license_url: msaLicenseUrl,
         pop_url_driver: popUrl,
+        subclass_id: classSubclasses.length > 0 ? Number(subclassId) : null,
       })
       .select()
       .single();
@@ -327,7 +385,7 @@ export default function EnterEventPage() {
           driverName: driver.full_name,
           raceNumber: raceNumber.trim(),
           eventName: selectedEvent.name,
-          className: selectedClass.name,
+          className: selectedSubclass ? `${selectedClass.name} — ${selectedSubclass.name}` : selectedClass.name,
           vehicleDescription: vehicleDescription(),
           entryReference: payReference,
           hasPop: !!popFile,
@@ -353,6 +411,7 @@ export default function EnterEventPage() {
       emailError,
     });
     setStep(4);
+    loadClassList(entry.id);
   }
 
   if (loading) {
@@ -433,7 +492,7 @@ export default function EnterEventPage() {
         {step === 2 && (
           <div className="fiori-panel rounded-sm p-8">
             <h2 className="text-lg font-semibold mb-6">2. Event & Vehicle Details</h2>
-            <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="col-span-2">
                 <label className="fiori-label">Select Event *</label>
                 <select className="fiori-input" value={eventId} onChange={(e) => handleEventChange(e.target.value)}>
@@ -446,12 +505,15 @@ export default function EnterEventPage() {
                 </select>
               </div>
 
-              <div>
+              <div className={classSubclasses.length > 0 ? '' : 'col-span-2'}>
                 <label className="fiori-label">Race Class *</label>
                 <select
                   className="fiori-input"
                   value={classId}
-                  onChange={(e) => setClassId(e.target.value)}
+                  onChange={(e) => {
+                    setClassId(e.target.value);
+                    setSubclassId('');
+                  }}
                   disabled={!eventId || setupLoading}
                 >
                   <option value="">
@@ -464,7 +526,22 @@ export default function EnterEventPage() {
                   ))}
                 </select>
               </div>
-              <div>
+
+              {classSubclasses.length > 0 && (
+                <div>
+                  <label className="fiori-label">Sub Class *</label>
+                  <select className="fiori-input" value={subclassId} onChange={(e) => setSubclassId(e.target.value)}>
+                    <option value="">— Select —</option>
+                    {classSubclasses.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="col-span-2">
                 <label className="fiori-label">Entry Category Fee Rate *</label>
                 <select
                   className="fiori-input"
@@ -642,6 +719,7 @@ export default function EnterEventPage() {
               <div>
                 <div className="fiori-label">Class</div>
                 {selectedClass.name}
+                {selectedSubclass ? ` — ${selectedSubclass.name}` : ''}
               </div>
               <div>
                 <div className="fiori-label">Race Number</div>
@@ -780,6 +858,68 @@ export default function EnterEventPage() {
                 {confirmation.emailError ? `: ${confirmation.emailError}` : '.'}
               </p>
             )}
+
+            <div className="mt-8 text-left">
+              <div className="text-sm font-semibold mb-1">
+                Entries in your class{selectedClass ? `: ${selectedClass.name}` : ''}
+                {classList && (
+                  <span className="font-normal text-[var(--fiori-text-subtle)]">
+                    {' '}
+                    · {classList.filter((r) => r.confirmed).length} confirmed
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--fiori-text-subtle)] mb-3">
+                Confirmed entries so far. Your own entry is marked Pending until the club confirms it.
+              </p>
+
+              {classListError ? (
+                <p className="text-sm" style={{ color: 'var(--fiori-negative)' }}>
+                  Couldn&apos;t load the class list: {classListError}
+                </p>
+              ) : classList === null ? (
+                <p className="text-sm text-[var(--fiori-text-subtle)]">Loading…</p>
+              ) : (
+                <table className="fiori-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 150 }}>Race #</th>
+                      <th>Driver</th>
+                      <th>Vehicle</th>
+                      {classList.some((r) => r.subclass_name) && <th>Sub class</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classList.map((r, i) => (
+                      <tr key={`${r.race_number}-${i}`} style={r.is_you ? { background: '#eff4f9' } : undefined}>
+                        <td>
+                          <span className="font-semibold">#{r.race_number}</span>
+                          {r.is_you && (
+                            <span
+                              className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm"
+                              style={{ background: '#ffffff', color: 'var(--fiori-action)' }}
+                            >
+                              YOU
+                            </span>
+                          )}
+                          {!r.confirmed && (
+                            <span
+                              className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm"
+                              style={{ background: '#fdf1f1', color: '#e78c07' }}
+                            >
+                              PENDING
+                            </span>
+                          )}
+                        </td>
+                        <td>{r.driver_name}</td>
+                        <td>{r.vehicle || '—'}</td>
+                        {classList.some((x) => x.subclass_name) && <td>{r.subclass_name ?? '—'}</td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
 
             <div className="mt-6">
               <Link href="/my/profile" className="fiori-btn fiori-btn-ghost inline-flex items-center justify-center">
