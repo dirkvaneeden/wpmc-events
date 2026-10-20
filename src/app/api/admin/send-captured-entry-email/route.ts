@@ -7,7 +7,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 // Use the same sender address you already have set up in Resend
-const FROM = 'Western Province Motor Club <entries@wpmc.co.za>';
+const FROM = 'Western Province Motor Club <mailer@events.slothwp.co.za>';
 
 const esc = (value: unknown) =>
   String(value ?? '')

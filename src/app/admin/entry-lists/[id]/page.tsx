@@ -113,8 +113,8 @@ export default function EventEntryListPage() {
           drivers(full_name, email, mobile, msa_licence_no, wpmc_member_no, emergency_contact, emergency_tel),
           vehicles(make, model, year, engine_make, capacity, cylinders),
           race_classes(name, no_documents_required),
-          admin_users(full_name),
           race_subclasses(name),
+          admin_users(full_name),
           entryFee(description, fee),
           payments(id, amount_paid, payment_reference, pop_file_url, created_at)
         `
@@ -312,7 +312,9 @@ export default function EventEntryListPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return entries.filter((e) => {
-      if (stateFilter !== 'ALL' && getPaymentState(e.status, e.pop_url_driver, e.fee_amount) !== stateFilter) return false;
+      if (stateFilter !== 'ALL' && getPaymentState(e.status, e.pop_url_driver, e.fee_amount) !== stateFilter) {
+        return false;
+      }
       if (classFilter && e.race_classes?.name !== classFilter) return false;
       if (!q) return true;
       return (
@@ -374,6 +376,7 @@ export default function EventEntryListPage() {
         </Link>{' '}
         / {event.name}
       </div>
+
       <div className="flex items-start justify-between gap-4">
         <h1 className="text-2xl font-semibold mb-1">{event.name}</h1>
         <div className="flex gap-2">
@@ -391,11 +394,12 @@ export default function EventEntryListPage() {
           </Link>
         </div>
       </div>
+
       <div className="text-sm text-[var(--fiori-text-subtle)] mb-6">
         {new Date(event.event_date).toLocaleDateString()} ·{' '}
         <span
           className="fiori-status-dot"
-          style={{ background: event.status ? 'var(--fiori-positive)' : '#8a8d8f' }}
+          style={{ background: event.status ? 'var(--fiori-positive)' : '#5e696e' }}
         />
         {event.status ? 'Open for entries' : 'Not open for entries'}
       </div>
@@ -484,7 +488,7 @@ export default function EventEntryListPage() {
 
             return (
               <Fragment key={entry.id}>
-                <tr style={isOpen ? { background: '#f5f9ff' } : undefined}>
+                <tr style={isOpen ? { background: '#eff4f9' } : undefined}>
                   <td>
                     <span className="font-semibold">#{entry.race_number}</span>
                     {entry.admin_users && (
@@ -567,7 +571,7 @@ export default function EventEntryListPage() {
                 </tr>
 
                 {isOpen && (
-                  <tr key={`${entry.id}-details`} style={{ background: '#fafbfc' }}>
+                  <tr style={{ background: '#fafafa' }}>
                     <td colSpan={8} style={{ padding: '20px 24px' }}>
                       <div className="grid grid-cols-3 gap-8 mb-4">
                         <div>
@@ -609,16 +613,17 @@ export default function EventEntryListPage() {
                           </Field>
                           <Field label="Late entry">{entry.is_late_entry ? 'Yes' : 'No'}</Field>
                           <Field label="GCR accepted">
-                            {entry.gcr_accepted ? 'Yes' : entry.race_classes?.no_documents_required ? 'Not required' : 'No'}
+                            {entry.gcr_accepted
+                              ? 'Yes'
+                              : entry.race_classes?.no_documents_required
+                                ? 'Not required'
+                                : 'No'}
                           </Field>
                           <Field label="Submitted">{new Date(entry.created_at).toLocaleString()}</Field>
                         </div>
                       </div>
 
-                      <div
-                        className="pt-4"
-                        style={{ borderTop: '1px solid var(--fiori-border)' }}
-                      >
+                      <div className="pt-4" style={{ borderTop: '1px solid var(--fiori-border)' }}>
                         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--fiori-text-subtle)] mb-2">
                           Payments
                         </div>
@@ -709,12 +714,15 @@ export default function EventEntryListPage() {
                           </div>
                         )}
 
-                        {entry.status !== 'PAID' && Number(amountPaid) > 0 && Number(amountPaid) < entry.fee_amount && (
-                          <p className="text-xs mt-2" style={{ color: 'var(--fiori-negative)' }}>
-                            This is less than the fee of {money(entry.fee_amount)}. Capturing it will still mark the
-                            entry as Paid.
-                          </p>
-                        )}
+                        {entry.status !== 'PAID' &&
+                          entry.fee_amount > 0 &&
+                          Number(amountPaid) > 0 &&
+                          Number(amountPaid) < entry.fee_amount && (
+                            <p className="text-xs mt-2" style={{ color: 'var(--fiori-negative)' }}>
+                              This is less than the fee of {money(entry.fee_amount)}. Capturing it will still mark the
+                              entry as Paid.
+                            </p>
+                          )}
                       </div>
                     </td>
                   </tr>
