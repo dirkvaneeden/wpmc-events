@@ -45,7 +45,7 @@ interface EntryRow {
     capacity: string;
     cylinders: number;
   } | null;
-  race_classes: { name: string } | null;
+  race_classes: { name: string; no_documents_required: boolean } | null;
   entryFee: { description: string | null; fee: number | null } | null;
   payments: PaymentRow[];
 }
@@ -110,7 +110,7 @@ export default function EventEntryListPage() {
           created_at, msa_license_url, pop_url_driver,
           drivers(full_name, email, mobile, msa_licence_no, wpmc_member_no, emergency_contact, emergency_tel),
           vehicles(make, model, year, engine_make, capacity, cylinders),
-          race_classes(name),
+          race_classes(name, no_documents_required),
           entryFee(description, fee),
           payments(id, amount_paid, payment_reference, pop_file_url, created_at)
         `
@@ -288,13 +288,14 @@ export default function EventEntryListPage() {
       AWAITING_POP: 0,
       POP_RECEIVED: 0,
       PAID: 0,
+      NO_PAYMENT: 0,
     };
     for (const e of entries) {
       const paid = sumPaid(e);
       expected += e.fee_amount;
       received += paid;
       outstanding += e.status === 'PAID' ? 0 : Math.max(e.fee_amount - paid, 0);
-      counts[getPaymentState(e.status, e.pop_url_driver)] += 1;
+      counts[getPaymentState(e.status, e.pop_url_driver, e.fee_amount)] += 1;
     }
     return { expected, received, outstanding, counts };
   }, [entries]);
@@ -307,7 +308,7 @@ export default function EventEntryListPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return entries.filter((e) => {
-      if (stateFilter !== 'ALL' && getPaymentState(e.status, e.pop_url_driver) !== stateFilter) return false;
+      if (stateFilter !== 'ALL' && getPaymentState(e.status, e.pop_url_driver, e.fee_amount) !== stateFilter) return false;
       if (classFilter && e.race_classes?.name !== classFilter) return false;
       if (!q) return true;
       return (
@@ -338,6 +339,7 @@ export default function EventEntryListPage() {
     { key: 'AWAITING_POP', label: 'Awaiting POP' },
     { key: 'POP_RECEIVED', label: 'POP received' },
     { key: 'PAID', label: 'Paid' },
+    { key: 'NO_PAYMENT', label: 'No payment due' },
   ];
 
   const cards = [
@@ -462,7 +464,7 @@ export default function EventEntryListPage() {
             </tr>
           )}
           {filtered.map((entry) => {
-            const state = getPaymentState(entry.status, entry.pop_url_driver);
+            const state = getPaymentState(entry.status, entry.pop_url_driver, entry.fee_amount);
             const meta = paymentStateMeta[state];
             const isOpen = expandedId === entry.id;
             const latestReceipt = [...entry.payments].reverse().find((p) => p.pop_file_url)?.pop_file_url ?? null;
@@ -521,7 +523,9 @@ export default function EventEntryListPage() {
                         </button>
                       )}
                       {!entry.msa_license_url && !entry.pop_url_driver && !latestReceipt && (
-                        <span className="text-[var(--fiori-text-subtle)]">—</span>
+                        <span className="text-[var(--fiori-text-subtle)]">
+                          {entry.race_classes?.no_documents_required ? 'Not required' : '—'}
+                        </span>
                       )}
                     </div>
                   </td>
@@ -574,7 +578,9 @@ export default function EventEntryListPage() {
                           <Field label="Sponsor">{entry.sponsor}</Field>
                           <Field label="Payment reference">{entry.pay_reference}</Field>
                           <Field label="Late entry">{entry.is_late_entry ? 'Yes' : 'No'}</Field>
-                          <Field label="GCR accepted">{entry.gcr_accepted ? 'Yes' : 'No'}</Field>
+                          <Field label="GCR accepted">
+                            {entry.gcr_accepted ? 'Yes' : entry.race_classes?.no_documents_required ? 'Not required' : 'No'}
+                          </Field>
                           <Field label="Submitted">{new Date(entry.created_at).toLocaleString()}</Field>
                         </div>
                       </div>
@@ -624,7 +630,7 @@ export default function EventEntryListPage() {
                           </table>
                         )}
 
-                        {entry.status !== 'PAID' && (
+                        {entry.status !== 'PAID' && entry.fee_amount > 0 && (
                           <div className="flex flex-wrap items-end gap-3">
                             <div>
                               <label className="fiori-label">Amount received (R)</label>

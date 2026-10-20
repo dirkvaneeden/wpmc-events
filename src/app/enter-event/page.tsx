@@ -166,6 +166,11 @@ export default function EnterEventPage() {
   const selectedClass = raceClasses.find((c) => c.id.toString() === classId);
   const selectedFee = entryFees.find((f) => f.id.toString() === feeId);
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+  // Documents are required unless the chosen class is flagged otherwise
+  const docsRequired = !selectedClass?.no_documents_required;
+  // A zero-value entry has nothing to pay, so no proof of payment is needed
+  const isFree = (selectedFee?.fee ?? 0) <= 0;
+  const popRequired = docsRequired && !isFree;
 
   function isNewVehicleValid() {
     return (
@@ -201,17 +206,21 @@ export default function EnterEventPage() {
       setMessage({ type: 'negative', text: 'Please complete all vehicle fields.' });
       return;
     }
+    if (docsRequired && !msaLicenseFile) {
+      setMessage({ type: 'negative', text: 'Please attach your MSA licence.' });
+      return;
+    }
     setMessage(null);
     setStep(3);
   }
 
   async function handleSubmit() {
     if (!driver || !selectedEvent || !selectedClass || !selectedFee) return;
-    if (!gcrAccepted) {
+    if (docsRequired && !gcrAccepted) {
       setMessage({ type: 'negative', text: 'You must accept the GCR rules to submit your entry.' });
       return;
     }
-    if (!popFile) {
+    if (popRequired && !popFile) {
       setMessage({ type: 'negative', text: 'Please attach your proof of payment before submitting.' });
       return;
     }
@@ -285,7 +294,7 @@ export default function EnterEventPage() {
         sponsor: sponsor.trim() || null,
         is_late_entry: isLate,
         fee_amount: selectedFee.fee ?? 0,
-        gcr_accepted: true,
+        gcr_accepted: docsRequired && gcrAccepted,
         entry_fee_id: selectedFee.id,
         pay_reference: payReference,
         msa_license_url: msaLicenseUrl,
@@ -321,6 +330,7 @@ export default function EnterEventPage() {
           className: selectedClass.name,
           vehicleDescription: vehicleDescription(),
           entryReference: payReference,
+          hasPop: !!popFile,
         }),
       });
 
@@ -586,8 +596,14 @@ export default function EnterEventPage() {
             )}
 
             <div className="mb-2 text-sm font-semibold">Documents</div>
+            {!docsRequired && (
+              <p className="text-xs text-[var(--fiori-text-subtle)] mb-3">
+                No documents or rules declaration are required for this class. You can still attach documents if you
+                have them.
+              </p>
+            )}
             <div className="mb-8">
-              <label className="fiori-label">MSA Race Licence (PDF or photo)</label>
+              <label className="fiori-label">MSA Race Licence (PDF or photo){docsRequired ? ' *' : ' (optional)'}</label>
               <input
                 className="fiori-input"
                 type="file"
@@ -614,7 +630,9 @@ export default function EnterEventPage() {
 
                 {step === 3 && selectedEvent && selectedClass && selectedFee && (
           <div className="fiori-panel rounded-sm p-8">
-            <h2 className="text-lg font-semibold mb-6">3. Review, Payment & Declaration</h2>
+            <h2 className="text-lg font-semibold mb-6">
+              {docsRequired ? '3. Review, Payment & Declaration' : '3. Review & Payment'}
+            </h2>
 
             <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
               <div>
@@ -645,47 +663,55 @@ export default function EnterEventPage() {
                 Total entry fee: R{(selectedFee.fee ?? 0).toFixed(2)}
               </div>
 
-              {bank ? (
-                <table className="text-sm mb-3">
-                  <tbody>
-                    <tr>
-                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Bank</td>
-                      <td>{bank.bank_name ?? '—'}</td>
-                    </tr>
-                    <tr>
-                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Account name</td>
-                      <td>{bank.acc_name ?? '—'}</td>
-                    </tr>
-                    <tr>
-                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Account no.</td>
-                      <td>{bank.acc_number ?? '—'}</td>
-                    </tr>
-                    <tr>
-                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Branch code</td>
-                      <td>{bank.branch_code ?? '—'}</td>
-                    </tr>
-                    <tr>
-                      <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Payment reference</td>
-                      <td className="font-semibold">
-                        #{raceNumber.trim()} - {driver.full_name}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              {isFree ? (
+                <p className="text-sm text-[var(--fiori-text-subtle)]">No payment is required for this entry.</p>
               ) : (
-                <p className="text-sm text-[var(--fiori-text-subtle)] mb-3">
-                  Banking details are not available yet. Please contact the club.
-                </p>
-              )}
+                <>
+                  {bank ? (
+                    <table className="text-sm mb-3">
+                      <tbody>
+                        <tr>
+                          <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Bank</td>
+                          <td>{bank.bank_name ?? '—'}</td>
+                        </tr>
+                        <tr>
+                          <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Account name</td>
+                          <td>{bank.acc_name ?? '—'}</td>
+                        </tr>
+                        <tr>
+                          <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Account no.</td>
+                          <td>{bank.acc_number ?? '—'}</td>
+                        </tr>
+                        <tr>
+                          <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Branch code</td>
+                          <td>{bank.branch_code ?? '—'}</td>
+                        </tr>
+                        <tr>
+                          <td className="pr-6 py-0.5 text-[var(--fiori-text-subtle)]">Payment reference</td>
+                          <td className="font-semibold">
+                            #{raceNumber.trim()} - {driver.full_name}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-sm text-[var(--fiori-text-subtle)] mb-3">
+                      Banking details are not available yet. Please contact the club.
+                    </p>
+                  )}
 
-              <p className="text-xs text-[var(--fiori-text-subtle)]">
-                Pay the total above using this reference, then attach your proof of payment below. Your entry is only
-                VALID once payment has been received and cleared by WPMC.
-              </p>
+                  <p className="text-xs text-[var(--fiori-text-subtle)]">
+                    Pay the total above using this reference, then attach your proof of payment below. Your entry is
+                    only VALID once payment has been received and cleared by WPMC.
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="mb-6">
-              <label className="fiori-label">Proof of Payment (PDF or photo) *</label>
+              <label className="fiori-label">
+                Proof of Payment (PDF or photo){popRequired ? ' *' : ' (optional)'}
+              </label>
               <input
                 className="fiori-input"
                 type="file"
@@ -696,20 +722,23 @@ export default function EnterEventPage() {
                 <div className="text-xs text-[var(--fiori-text-subtle)] mt-1">Selected: {popFile.name}</div>
               )}
             </div>
+                        {docsRequired && (
+              <>
+                <div
+                  className="mb-4 px-4 py-3 text-sm rounded-sm border"
+                  style={{ background: '#fdf9ec', borderColor: '#f0d98a' }}
+                >
+                  <strong style={{ color: '#9a6b00' }}>MSA Rules Declaration:</strong> I / We have read and understood
+                  GCR&apos;s 93, 94, 97, 113, 121 and 122 of the MSA Handbook and signify my/our agreement to abide by
+                  these Rules by submitting this digital entry form.
+                </div>
 
-            <div
-              className="mb-4 px-4 py-3 text-sm rounded-sm border"
-              style={{ background: '#fdf9ec', borderColor: '#f0d98a' }}
-            >
-              <strong style={{ color: '#9a6b00' }}>MSA Rules Declaration:</strong> I / We have read and understood
-              GCR&apos;s 93, 94, 97, 113, 121 and 122 of the MSA Handbook and signify my/our agreement to abide by
-              these Rules by submitting this digital entry form.
-            </div>
-
-            <label className="flex items-center gap-2 text-sm mb-6">
-              <input type="checkbox" checked={gcrAccepted} onChange={(e) => setGcrAccepted(e.target.checked)} />
-              I accept the GCR rules and declare all details are accurate.
-            </label>
+                <label className="flex items-center gap-2 text-sm mb-6">
+                  <input type="checkbox" checked={gcrAccepted} onChange={(e) => setGcrAccepted(e.target.checked)} />
+                  I accept the GCR rules and declare all details are accurate.
+                </label>
+              </>
+            )}
 
             <div className="flex justify-between">
               <button className="fiori-btn fiori-btn-ghost" onClick={() => setStep(2)} disabled={submitting}>
@@ -735,7 +764,7 @@ export default function EnterEventPage() {
               </span>
             </p>
             <p className="text-sm text-[var(--fiori-text-subtle)] mb-4">
-              Your entry and proof of payment have been received and will be reviewed by the club. Your entry
+              {popFile ? 'Your entry and proof of payment have been received' : 'Your entry has been received'} and will be reviewed by the club. Your entry
               reference is <strong>{confirmation.payReference}</strong>. If anything further is needed, we will
               contact you.
               <strong>{confirmation.payReference}</strong>.

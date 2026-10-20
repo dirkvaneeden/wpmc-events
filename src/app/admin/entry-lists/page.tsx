@@ -16,6 +16,7 @@ interface EntryLite {
   event_id: string;
   status: string;
   pop_url_driver: string | null;
+  fee_amount: number;
 }
 
 interface Counts {
@@ -23,15 +24,18 @@ interface Counts {
   awaiting: number;
   received: number;
   paid: number;
+  noPayment: number;
 }
+
+const emptyCounts: Counts = { total: 0, awaiting: 0, received: 0, paid: 0, noPayment: 0 };
 
 type Kind = 'OPEN' | 'PLANNED' | 'PAST';
 type Filter = 'ALL' | Kind;
 
 const kindMeta: Record<Kind, { label: string; color: string }> = {
   OPEN: { label: 'Open for entries', color: 'var(--fiori-positive)' },
-  PLANNED: { label: 'Planned', color: '#0070f2' },
-  PAST: { label: 'Past', color: '#8a8d8f' },
+  PLANNED: { label: 'Planned', color: '#427cac' },
+  PAST: { label: 'Past', color: '#5e696e' },
 };
 
 const kindOrder: Record<Kind, number> = { OPEN: 0, PLANNED: 1, PAST: 2 };
@@ -47,7 +51,7 @@ async function fetchEntries(): Promise<EntryLite[]> {
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from('event_entries')
-      .select('event_id, status, pop_url_driver')
+      .select('event_id, status, pop_url_driver, fee_amount')
       .order('id')
       .range(from, from + pageSize - 1);
     if (error) throw error;
@@ -79,11 +83,12 @@ export default function EntryListsPage() {
       const entries = await fetchEntries();
       const byEvent: Record<string, Counts> = {};
       for (const e of entries) {
-        const c = (byEvent[e.event_id] ??= { total: 0, awaiting: 0, received: 0, paid: 0 });
+        const c = (byEvent[e.event_id] ??= { ...emptyCounts });
         c.total += 1;
-        const state = getPaymentState(e.status, e.pop_url_driver);
+        const state = getPaymentState(e.status, e.pop_url_driver, e.fee_amount);
         if (state === 'PAID') c.paid += 1;
         else if (state === 'POP_RECEIVED') c.received += 1;
+        else if (state === 'NO_PAYMENT') c.noPayment += 1;
         else c.awaiting += 1;
       }
 
@@ -109,7 +114,7 @@ export default function EntryListsPage() {
     });
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
+    <div className="max-w-7xl mx-auto px-6 py-8">
       <div className="text-xs text-[var(--fiori-text-subtle)] mb-1">Admin / Entry Lists</div>
       <h1 className="text-2xl font-semibold mb-1">Entry Lists</h1>
       <p className="text-sm text-[var(--fiori-text-subtle)] mb-6">
@@ -144,26 +149,27 @@ export default function EntryListsPage() {
             <th style={{ textAlign: 'right' }}>Awaiting POP</th>
             <th style={{ textAlign: 'right' }}>POP received</th>
             <th style={{ textAlign: 'right' }}>Paid</th>
+            <th style={{ textAlign: 'right' }}>No payment due</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {loading && (
             <tr>
-              <td colSpan={8} className="text-center text-[var(--fiori-text-subtle)] py-6">
+              <td colSpan={9} className="text-center text-[var(--fiori-text-subtle)] py-6">
                 Loading…
               </td>
             </tr>
           )}
           {!loading && rows.length === 0 && (
             <tr>
-              <td colSpan={8} className="text-center text-[var(--fiori-text-subtle)] py-6">
+              <td colSpan={9} className="text-center text-[var(--fiori-text-subtle)] py-6">
                 No events found.
               </td>
             </tr>
           )}
           {rows.map(({ ev, kind }) => {
-            const c = counts[ev.id] ?? { total: 0, awaiting: 0, received: 0, paid: 0 };
+            const c = counts[ev.id] ?? emptyCounts;
             return (
               <tr key={ev.id}>
                 <td>
@@ -180,6 +186,7 @@ export default function EntryListsPage() {
                 <td style={{ textAlign: 'right' }}>{c.awaiting}</td>
                 <td style={{ textAlign: 'right' }}>{c.received}</td>
                 <td style={{ textAlign: 'right' }}>{c.paid}</td>
+                <td style={{ textAlign: 'right' }}>{c.noPayment}</td>
                 <td style={{ textAlign: 'right' }}>
                   <Link
                     href={`/admin/entry-lists/${ev.id}/report`}

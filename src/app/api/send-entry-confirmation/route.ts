@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
     }
 
-    const { to, driverName, raceNumber, eventName, className, vehicleDescription, entryReference } =
+    const { to, driverName, raceNumber, eventName, className, vehicleDescription, entryReference, hasPop } =
       await req.json();
 
     // A driver may only trigger an email to their own verified address
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         </div>
         <div style="padding: 24px; border: 1px solid #d9d9d9; border-top: none;">
           <p>Dear ${esc(driverName)},</p>
-          <p>Thank you for submitting your event registration. Your entry and proof of payment have been received under reference <strong>${esc(entryReference)}</strong>.</p>
+          <p>Thank you for submitting your event registration.${hasPop ? 'Your entry and proof of payment have been received' : 'Your entry has been received'} under reference <strong>${esc(entryReference)}</strong>.</p>
 
           <div style="background: #f7f7f7; border: 1px solid #d9d9d9; border-radius: 2px; padding: 16px; margin: 20px 0;">
             <div style="font-weight: bold; color: #0070f2; margin-bottom: 10px;">ENTRY SUMMARY</div>
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
           </div>
 
           <p style="font-size: 13px; color: #6a6d70;">
-            The club will review your entry and the proof of payment you attached. If anything further is needed, we will contact you.
+            ${hasPop ? 'The club will review your entry and the proof of payment you attached.' : 'The club will review your entry.'} If anything further is needed, we will contact you.
           </p>
         </div>
       </div>

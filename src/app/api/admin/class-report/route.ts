@@ -103,7 +103,7 @@ export async function GET(req: NextRequest) {
           rate: e.entryFee?.description ?? '',
           fee: e.fee_amount,
           paid: sumPaid(e),
-          status: paymentStateMeta[getPaymentState(e.status, e.pop_url_driver)].label,
+          status: paymentStateMeta[getPaymentState(e.status, e.pop_url_driver, e.fee_amount)].label,
           late: e.is_late_entry ? 'Yes' : 'No',
           licence: e.drivers?.msa_licence_no ?? '',
           member: e.drivers?.wpmc_member_no ?? '',
@@ -119,16 +119,16 @@ export async function GET(req: NextRequest) {
     // ---- Sheet 2: summary per class ----
     const summary = workbook.addWorksheet('Summary');
     summary.getColumn(1).width = 30;
-    for (let i = 2; i <= 5; i++) summary.getColumn(i).width = 16;
+    for (let i = 2; i <= 6; i++) summary.getColumn(i).width = 16;
 
     summary.addRow([event.name]).font = { bold: true, size: 14 };
     summary.addRow([`Event date: ${event.event_date}`]);
     summary.addRow([`Report generated: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`]);
     summary.addRow([]);
-    styleHeader(summary.addRow(['Class', 'Entries', 'Paid', 'POP received', 'Awaiting POP']));
+    styleHeader(summary.addRow(['Class', 'Entries', 'Paid', 'POP received', 'Awaiting POP', 'No payment due']));
 
     for (const g of groups) {
-      summary.addRow([g.className, g.entries.length, g.paid, g.popReceived, g.awaiting]);
+      summary.addRow([g.className, g.entries.length, g.paid, g.popReceived, g.awaiting, g.noPayment]);
     }
     summary.addRow([
       'Total',
@@ -136,6 +136,7 @@ export async function GET(req: NextRequest) {
       groups.reduce((s, g) => s + g.paid, 0),
       groups.reduce((s, g) => s + g.popReceived, 0),
       groups.reduce((s, g) => s + g.awaiting, 0),
+      groups.reduce((s, g) => s + g.noPayment, 0),
     ]).font = { bold: true };
 
     const buffer = await workbook.xlsx.writeBuffer();

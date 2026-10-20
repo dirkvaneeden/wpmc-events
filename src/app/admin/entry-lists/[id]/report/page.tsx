@@ -157,6 +157,7 @@ export default function ClassReportPage() {
             <div className="text-sm text-[var(--fiori-text-subtle)]">
               {g.entries.length} {g.entries.length === 1 ? 'entry' : 'entries'} · {g.paid} paid · {g.popReceived} POP
               received · {g.awaiting} awaiting POP
+              {g.noPayment > 0 ? ` · ${g.noPayment} no payment due` : ''}
             </div>
           </div>
 
@@ -173,7 +174,7 @@ export default function ClassReportPage() {
             </thead>
             <tbody>
               {g.entries.map((e) => {
-                const meta = paymentStateMeta[getPaymentState(e.status, e.pop_url_driver)];
+                const meta = paymentStateMeta[getPaymentState(e.status, e.pop_url_driver, e.fee_amount)];
                 return (
                   <tr key={e.id}>
                     <td>

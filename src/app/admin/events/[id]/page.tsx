@@ -26,9 +26,11 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
   const [rows, setRows] = useState<RaceClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
+  const [newNoDocs, setNewNoDocs] = useState(false);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
+  const [editNoDocs, setEditNoDocs] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
   async function load() {
@@ -56,7 +58,9 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
       return;
     }
     setAdding(true);
-    const { error } = await supabase.from('race_classes').insert({ name, event_id: eventId });
+    const { error } = await supabase
+      .from('race_classes')
+      .insert({ name, no_documents_required: newNoDocs, event_id: eventId });
     setAdding(false);
 
     if (error) {
@@ -67,6 +71,7 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
       return;
     }
     setNewName('');
+    setNewNoDocs(false);
     notify('positive', 'Race class added.');
     load();
   }
@@ -78,7 +83,10 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
       return;
     }
     setSavingEdit(true);
-    const { error } = await supabase.from('race_classes').update({ name }).eq('id', id);
+    const { error } = await supabase
+      .from('race_classes')
+      .update({ name, no_documents_required: editNoDocs })
+      .eq('id', id);
     setSavingEdit(false);
 
     if (error) {
@@ -113,16 +121,24 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
   return (
     <section className="mb-10">
       <h2 className="text-lg font-semibold mb-1">Race classes</h2>
-      <p className="text-sm text-[var(--fiori-text-subtle)] mb-3">The classes drivers can enter for this event.</p>
+      <p className="text-sm text-[var(--fiori-text-subtle)] mb-3">
+        The classes drivers can enter for this event. Tick &quot;No documentation required&quot; for classes where the
+        MSA licence and proof of payment are optional and the GCR rules declaration is not shown.
+      </p>
 
-      <div className="flex gap-2 mb-3 max-w-md">
+      <div className="flex flex-wrap items-center gap-3 mb-3 max-w-3xl">
         <input
           className="fiori-input"
+          style={{ maxWidth: 280 }}
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           placeholder="e.g. Formula Vee"
         />
+        <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+          <input type="checkbox" checked={newNoDocs} onChange={(e) => setNewNoDocs(e.target.checked)} />
+          No documentation required
+        </label>
         <button className="fiori-btn fiori-btn-emphasized whitespace-nowrap" onClick={handleAdd} disabled={adding}>
           {adding ? 'Adding…' : '+ Add Class'}
         </button>
@@ -132,27 +148,28 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
         <thead>
           <tr>
             <th>Name</th>
+            <th>Documents</th>
             <th style={{ textAlign: 'right' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
           {loading && (
             <tr>
-              <td colSpan={2} className="text-center text-[var(--fiori-text-subtle)] py-6">
+              <td colSpan={3} className="text-center text-[var(--fiori-text-subtle)] py-6">
                 Loading…
               </td>
             </tr>
           )}
           {!loading && rows.length === 0 && (
             <tr>
-              <td colSpan={2} className="text-center text-[var(--fiori-text-subtle)] py-6">
+              <td colSpan={3} className="text-center text-[var(--fiori-text-subtle)] py-6">
                 No race classes yet for this event.
               </td>
             </tr>
           )}
           {rows.map((row) =>
             editingId === row.id ? (
-              <tr key={row.id} style={{ background: '#f5f9ff' }}>
+              <tr key={row.id} style={{ background: '#eff4f9' }}>
                 <td>
                   <input
                     className="fiori-input"
@@ -161,6 +178,12 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
                     onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit(row.id)}
                     autoFocus
                   />
+                </td>
+                <td>
+                  <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                    <input type="checkbox" checked={editNoDocs} onChange={(e) => setEditNoDocs(e.target.checked)} />
+                    No documentation required
+                  </label>
                 </td>
                 <td style={{ textAlign: 'right' }}>
                   <button
@@ -182,12 +205,25 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
             ) : (
               <tr key={row.id}>
                 <td>{row.name}</td>
+                <td>
+                  {row.no_documents_required ? (
+                    <span
+                      className="text-xs font-semibold px-2 py-0.5 rounded-sm"
+                      style={{ background: '#eff4f9', color: 'var(--fiori-action)' }}
+                    >
+                      Not required
+                    </span>
+                  ) : (
+                    'Required'
+                  )}
+                </td>
                 <td style={{ textAlign: 'right' }}>
                   <button
                     className="fiori-btn fiori-btn-ghost mr-2"
                     onClick={() => {
                       setEditingId(row.id);
                       setEditName(row.name);
+                      setEditNoDocs(row.no_documents_required ?? false);
                     }}
                   >
                     Edit
@@ -208,7 +244,6 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
     </section>
   );
 }
-
 /* ---------------- Entry fees ---------------- */
 
 function FeesSection({ eventId, reloadKey, notify }: SectionProps) {
@@ -612,7 +647,7 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
     setCopying(true);
     try {
       const results = await Promise.all([
-        supabase.from('race_classes').select('name').eq('event_id', sourceId),
+        supabase.from('race_classes').select('name, no_documents_required').eq('event_id', sourceId),
         supabase.from('entryFee').select('description, fee, is_active').eq('event_id', sourceId),
         supabase.from('bank_details').select('*').eq('event_id', sourceId).maybeSingle(),
         supabase.from('race_classes').select('name').eq('event_id', eventId),
@@ -627,7 +662,7 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
       const existingClassNames = new Set((haveClasses.data ?? []).map((c) => c.name.toLowerCase()));
       const newClasses = (srcClasses.data ?? [])
         .filter((c) => !existingClassNames.has(c.name.toLowerCase()))
-        .map((c) => ({ name: c.name, event_id: eventId }));
+        .map((c) => ({ name: c.name, no_documents_required: c.no_documents_required, event_id: eventId }));
 
       const existingFees = new Set((haveFees.data ?? []).map((f) => `${f.description}|${f.fee}`));
       const newFees = (srcFees.data ?? [])

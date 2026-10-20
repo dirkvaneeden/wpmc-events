@@ -21,6 +21,7 @@ export interface RaceClass {
   id: number;
   name: string;
   event_id: string;
+  no_documents_required: boolean;
 }
 
 export interface Driver {

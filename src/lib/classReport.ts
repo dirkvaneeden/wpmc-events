@@ -36,6 +36,7 @@ export interface ClassGroup {
   paid: number;
   popReceived: number;
   awaiting: number;
+  noPayment: number;
 }
 
 export function groupByClass(entries: ReportEntry[]): ClassGroup[] {
@@ -45,14 +46,15 @@ export function groupByClass(entries: ReportEntry[]): ClassGroup[] {
     const className = e.race_classes?.name ?? 'Unassigned';
     let group = map.get(className);
     if (!group) {
-      group = { className, entries: [], paid: 0, popReceived: 0, awaiting: 0 };
+      group = { className, entries: [], paid: 0, popReceived: 0, awaiting: 0, noPayment: 0 };
       map.set(className, group);
     }
     group.entries.push(e);
 
-    const state = getPaymentState(e.status, e.pop_url_driver);
+    const state = getPaymentState(e.status, e.pop_url_driver, e.fee_amount);
     if (state === 'PAID') group.paid += 1;
     else if (state === 'POP_RECEIVED') group.popReceived += 1;
+    else if (state === 'NO_PAYMENT') group.noPayment += 1;
     else group.awaiting += 1;
   }
 
