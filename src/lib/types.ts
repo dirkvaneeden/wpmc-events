@@ -126,4 +126,5 @@ export interface AdminUser {
   full_name: string;
   email: string;
   created_at: string;
+    must_change_password: boolean;
 }

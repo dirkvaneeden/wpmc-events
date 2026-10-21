@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
     const { error: insertError } = await adminClient.from('admin_users').insert({
       auth_user_id: created.user.id,
       full_name: fullName,
+      must_change_password: true,
       email,
     });
 

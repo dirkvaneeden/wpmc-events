@@ -42,6 +42,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       return;
     }
 
+    // A forced password change comes before everything else
+    if (admin.must_change_password && pathname !== '/admin/change-password') {
+      setAllowed(false);
+      router.replace('/admin/change-password');
+      return;
+    }
+
     setAdminName(admin.full_name);
     setAllowed(true);
   }
@@ -56,6 +63,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       </div>
     );
   }
+
+  // The password screen has no menu, so there is nowhere else to go until it's done
+  if (pathname === '/admin/change-password') return <>{children}</>;
 
   return (
     <>

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     `;
 
     const { data, error } = await resend.emails.send({
-      from: 'Western Province Motor Club <mailer@events.slothwp.co.za>',
+      from: 'Western Province Motor Club <mailer@events-wmpconline.co.za>',
       to,
       subject: `Payment Confirmed - #${raceNumber} (${driverName})`,
       html,
