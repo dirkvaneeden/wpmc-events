@@ -48,6 +48,7 @@ interface EntryRow {
   race_classes: { name: string; no_documents_required: boolean } | null;
   race_subclasses: { name: string } | null;
   admin_users: { full_name: string } | null;
+  entry_types: { name: string } | null;
   entryFee: { description: string | null; fee: number | null } | null;
   payments: PaymentRow[];
 }
@@ -115,6 +116,7 @@ export default function EventEntryListPage() {
           race_classes(name, no_documents_required),
           race_subclasses(name),
           admin_users(full_name),
+          entry_types(name),
           entryFee(description, fee),
           payments(id, amount_paid, payment_reference, pop_file_url, created_at)
         `
@@ -605,6 +607,7 @@ export default function EventEntryListPage() {
                           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--fiori-text-subtle)] mb-2">
                             Entry
                           </div>
+                          <Field label="Entry type">{entry.entry_types?.name}</Field>
                           <Field label="Sub class">{entry.race_subclasses?.name}</Field>
                           <Field label="Sponsor">{entry.sponsor}</Field>
                           <Field label="Payment reference">{entry.pay_reference}</Field>

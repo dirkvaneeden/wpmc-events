@@ -141,7 +141,7 @@ export default function MyProfilePage() {
   function openEditProfile() {
     if (!driver) return;
     setProfileForm({
-      msa_licence_no: driver.msa_licence_no,
+      msa_licence_no: driver.msa_licence_no ?? '',
       wpmc_member_no: driver.wpmc_member_no ?? '',
       full_name: driver.full_name,
       mobile: driver.mobile,
@@ -168,7 +168,7 @@ export default function MyProfilePage() {
     const { error } = await supabase
       .from('drivers')
       .update({
-        msa_licence_no: profileForm.msa_licence_no.trim(),
+        msa_licence_no: profileForm.msa_licence_no.trim() || null,
         wpmc_member_no: profileForm.wpmc_member_no.trim() || null,
         full_name: profileForm.full_name.trim(),
         mobile: profileForm.mobile.trim(),
@@ -324,7 +324,8 @@ export default function MyProfilePage() {
             <div className="text-xs text-[var(--fiori-text-subtle)] mb-1">My Profile</div>
             <h1 className="text-2xl font-semibold">{driver.full_name}</h1>
             <div className="text-sm text-[var(--fiori-text-subtle)]">
-              MSA {driver.msa_licence_no} · {driver.email} · {driver.mobile}
+              {driver.msa_licence_no ? `MSA ${driver.msa_licence_no} · ` : ''}
+              {driver.email} · {driver.mobile}
             </div>
           </div>
           <div className="flex gap-2">

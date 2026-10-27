@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { RaceEvent, RaceClass, RaceSubclass, EntryFee, BankDetails } from '@/lib/types';
+import { RaceEvent, RaceClass, RaceSubclass, EntryFee, BankDetails, EntryType } from '@/lib/types';
 
 type Notify = (type: 'positive' | 'negative', text: string) => void;
 
@@ -459,6 +459,263 @@ function ClassesSection({ eventId, reloadKey, notify }: SectionProps) {
     </section>
   );
 }
+/* ---------------- Entry types ---------------- */
+
+const yesNo = (value: boolean) => (
+  <span
+    className="text-xs font-semibold px-2 py-0.5 rounded-sm"
+    style={value ? { background: '#eff4f9', color: 'var(--fiori-action)' } : { background: '#f7f7f7', color: '#666666' }}
+  >
+    {value ? 'Yes' : 'No'}
+  </span>
+);
+
+function EntryTypesSection({ eventId, reloadKey, notify }: SectionProps) {
+  const [rows, setRows] = useState<EntryType[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [newName, setNewName] = useState('');
+  const [newPay, setNewPay] = useState(true);
+  const [newDocs, setNewDocs] = useState(true);
+  const [newBasic, setNewBasic] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPay, setEditPay] = useState(true);
+  const [editDocs, setEditDocs] = useState(true);
+  const [editBasic, setEditBasic] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('entry_types')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('name', { ascending: true });
+
+    if (error) notify('negative', `Couldn't load entry types: ${error.message}`);
+    else setRows(data ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, reloadKey]);
+
+  async function handleAdd() {
+    const name = newName.trim();
+    if (!name) {
+      notify('negative', 'Entry type name is required.');
+      return;
+    }
+    setAdding(true);
+    const { error } = await supabase.from('entry_types').insert({
+      event_id: eventId,
+      name,
+      requires_payment: newPay,
+      requires_documents: newDocs,
+      is_basic: newBasic,
+    });
+    setAdding(false);
+
+    if (error) {
+      notify(
+        'negative',
+        error.code === '23505' ? 'That entry type already exists for this event.' : `Save failed: ${error.message}`
+      );
+      return;
+    }
+    setNewName('');
+    setNewPay(true);
+    setNewDocs(true);
+    setNewBasic(false);
+    notify('positive', 'Entry type added.');
+    load();
+  }
+
+  async function handleSaveEdit(id: number) {
+    const name = editName.trim();
+    if (!name) {
+      notify('negative', 'Entry type name is required.');
+      return;
+    }
+    setSavingEdit(true);
+    const { error } = await supabase
+      .from('entry_types')
+      .update({ name, requires_payment: editPay, requires_documents: editDocs, is_basic: editBasic })
+      .eq('id', id);
+    setSavingEdit(false);
+
+    if (error) {
+      notify(
+        'negative',
+        error.code === '23505' ? 'That entry type already exists for this event.' : `Save failed: ${error.message}`
+      );
+      return;
+    }
+    setEditingId(null);
+    notify('positive', 'Entry type updated.');
+    load();
+  }
+
+  async function handleDelete(row: EntryType) {
+    if (!confirm(`Delete the entry type "${row.name}" from this event?`)) return;
+    const { error } = await supabase.from('entry_types').delete().eq('id', row.id);
+
+    if (error) {
+      notify(
+        'negative',
+        error.code === '23503'
+          ? "Entries have already been made with this type, so it can't be deleted."
+          : `Delete failed: ${error.message}`
+      );
+      return;
+    }
+    notify('positive', 'Entry type deleted.');
+    load();
+  }
+
+  const checkbox = (checked: boolean, onChange: (v: boolean) => void, label: string) => (
+    <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
+  );
+
+  return (
+    <section className="mb-10">
+      <h2 className="text-lg font-semibold mb-1">Entry types</h2>
+      <p className="text-sm text-[var(--fiori-text-subtle)] mb-1">
+        Drivers choose one of these in a pop-up when they pick this event. With no entry types, drivers aren&apos;t
+        asked, and the normal rules apply.
+      </p>
+      <ul className="text-xs text-[var(--fiori-text-subtle)] mb-3 list-disc pl-5">
+        <li>
+          <strong>Requires payment</strong> off: no fee rate, bank details or proof of payment, and the entry is
+          recorded as R0.00.
+        </li>
+        <li>
+          <strong>Requires documents</strong> off: the MSA licence and proof of payment are optional, and the GCR
+          declaration is hidden.
+        </li>
+        <li>
+          <strong>Basic details only</strong>: the form asks for the driver&apos;s name and vehicle only, with no MSA
+          licence number or WPMC member number.
+        </li>
+      </ul>
+
+      <div className="flex flex-wrap items-center gap-4 mb-3 max-w-4xl">
+        <input
+          className="fiori-input"
+          style={{ maxWidth: 240 }}
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          placeholder="e.g. Basic"
+        />
+        {checkbox(newPay, setNewPay, 'Requires payment')}
+        {checkbox(newDocs, setNewDocs, 'Requires documents')}
+        {checkbox(newBasic, setNewBasic, 'Basic details only')}
+        <button className="fiori-btn fiori-btn-emphasized whitespace-nowrap" onClick={handleAdd} disabled={adding}>
+          {adding ? 'Adding…' : '+ Add Entry Type'}
+        </button>
+      </div>
+
+      <table className="fiori-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Requires payment</th>
+            <th>Requires documents</th>
+            <th>Basic details only</th>
+            <th style={{ textAlign: 'right' }}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading && (
+            <tr>
+              <td colSpan={5} className="text-center text-[var(--fiori-text-subtle)] py-6">
+                Loading…
+              </td>
+            </tr>
+          )}
+          {!loading && rows.length === 0 && (
+            <tr>
+              <td colSpan={5} className="text-center text-[var(--fiori-text-subtle)] py-6">
+                No entry types for this event. Drivers won&apos;t be asked to choose one.
+              </td>
+            </tr>
+          )}
+          {rows.map((row) =>
+            editingId === row.id ? (
+              <tr key={row.id} style={{ background: '#eff4f9' }}>
+                <td>
+                  <input
+                    className="fiori-input"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit(row.id)}
+                    autoFocus
+                  />
+                </td>
+                <td>{checkbox(editPay, setEditPay, 'Yes')}</td>
+                <td>{checkbox(editDocs, setEditDocs, 'Yes')}</td>
+                <td>{checkbox(editBasic, setEditBasic, 'Yes')}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <button
+                    className="fiori-btn fiori-btn-ghost mr-2"
+                    onClick={() => setEditingId(null)}
+                    disabled={savingEdit}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="fiori-btn fiori-btn-emphasized"
+                    onClick={() => handleSaveEdit(row.id)}
+                    disabled={savingEdit}
+                  >
+                    {savingEdit ? 'Saving…' : 'Save'}
+                  </button>
+                </td>
+              </tr>
+            ) : (
+              <tr key={row.id}>
+                <td>{row.name}</td>
+                <td>{yesNo(row.requires_payment)}</td>
+                <td>{yesNo(row.requires_documents)}</td>
+                <td>{yesNo(row.is_basic)}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <button
+                    className="fiori-btn fiori-btn-ghost mr-2"
+                    onClick={() => {
+                      setEditingId(row.id);
+                      setEditName(row.name);
+                      setEditPay(row.requires_payment);
+                      setEditDocs(row.requires_documents);
+                      setEditBasic(row.is_basic);
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    className="fiori-btn fiori-btn-ghost"
+                    style={{ color: 'var(--fiori-negative)' }}
+                    onClick={() => handleDelete(row)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            )
+          )}
+        </tbody>
+      </table>
+    </section>
+  );
+}
 /* ---------------- Entry fees ---------------- */
 
 function FeesSection({ eventId, reloadKey, notify }: SectionProps) {
@@ -831,7 +1088,7 @@ function BankSection({ eventId, reloadKey, notify }: SectionProps) {
   );
 }
 
-/* ---------------- /* ---------------- Copy from another event ---------------- */
+/* ---------------- Copy from another event ---------------- */
 
 function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: () => void; notify: Notify }) {
   const [others, setOthers] = useState<Pick<RaceEvent, 'id' | 'name' | 'event_date'>[]>([]);
@@ -854,7 +1111,7 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
     if (!sourceId) return;
     if (
       !confirm(
-        'Copy race classes (with their sub classes), entry fees and bank details from that event? Anything this event already has is kept.'
+        'Copy entry types, race classes (with their sub classes), entry fees and bank details from that event? Anything this event already has is kept.'
       )
     )
       return;
@@ -873,6 +1130,33 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
       if (failed?.error) throw failed.error;
 
       const [srcClasses, srcFees, srcBank, haveClasses, haveFees, haveBank] = results;
+
+      // Entry types
+      const [srcTypesRes, haveTypesRes] = await Promise.all([
+        supabase
+          .from('entry_types')
+          .select('name, requires_payment, requires_documents, is_basic')
+          .eq('event_id', sourceId),
+        supabase.from('entry_types').select('name').eq('event_id', eventId),
+      ]);
+      if (srcTypesRes.error) throw srcTypesRes.error;
+      if (haveTypesRes.error) throw haveTypesRes.error;
+
+      const haveTypeNames = new Set((haveTypesRes.data ?? []).map((t) => t.name.toLowerCase()));
+      const newTypes = (srcTypesRes.data ?? [])
+        .filter((t) => !haveTypeNames.has(t.name.toLowerCase()))
+        .map((t) => ({
+          name: t.name,
+          requires_payment: t.requires_payment,
+          requires_documents: t.requires_documents,
+          is_basic: t.is_basic,
+          event_id: eventId,
+        }));
+
+      if (newTypes.length > 0) {
+        const { error } = await supabase.from('entry_types').insert(newTypes);
+        if (error) throw error;
+      }
 
       // Classes
       const existingClassNames = new Set((haveClasses.data ?? []).map((c) => c.name.toLowerCase()));
@@ -961,7 +1245,7 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
 
       notify(
         'positive',
-        `Copied ${newClasses.length} class(es), ${newSubCount} sub class(es) and ${newFees.length} entry fee(s)${bankCopied ? ', plus the bank details' : ''}.`
+        `Copied ${newTypes.length} entry type(s), ${newClasses.length} class(es), ${newSubCount} sub class(es) and ${newFees.length} entry fee(s)${bankCopied ? ', plus the bank details' : ''}.`
       );
       setSourceId('');
       onCopied();
@@ -975,8 +1259,8 @@ function CopyPanel({ eventId, onCopied, notify }: { eventId: string; onCopied: (
     <div className="fiori-panel rounded-sm p-4 mb-8">
       <div className="text-sm font-semibold mb-1">Copy setup from another event</div>
       <p className="text-xs text-[var(--fiori-text-subtle)] mb-3">
-        Saves retyping: copies race classes (with their sub classes), entry fees and bank details. Anything already set
-        up here is kept.
+        Saves retyping: copies entry types, race classes (with their sub classes), entry fees and bank details.
+        Anything already set up here is kept.
       </p>
       <div className="flex gap-2 max-w-xl">
         <select className="fiori-input" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
@@ -1074,6 +1358,7 @@ export default function EventSetupPage() {
       </p>
 
       <CopyPanel eventId={event.id} onCopied={() => setReloadKey((k) => k + 1)} notify={notify} />
+      <EntryTypesSection eventId={event.id} reloadKey={reloadKey} notify={notify} />
       <ClassesSection eventId={event.id} reloadKey={reloadKey} notify={notify} />
       <FeesSection eventId={event.id} reloadKey={reloadKey} notify={notify} />
       <BankSection eventId={event.id} reloadKey={reloadKey} notify={notify} />

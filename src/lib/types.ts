@@ -35,7 +35,7 @@ export interface RaceSubclass {
 export interface Driver {
   id: string;
   auth_user_id: string | null; 
-  msa_licence_no: string;
+  msa_licence_no: string | null;
   wpmc_member_no: string | null;
   full_name: string;
   email: string;
@@ -89,6 +89,7 @@ export interface EventEntry {
   created_at: string;
   pay_reference: string | null;
   entry_fee_id: number | null;
+  entry_type_id: number | null;
 }
 
 export interface Payment {
@@ -127,4 +128,12 @@ export interface AdminUser {
   email: string;
   created_at: string;
     must_change_password: boolean;
+}
+export interface EntryType {
+  id: number;
+  event_id: string;
+  name: string;
+  requires_payment: boolean;
+  requires_documents: boolean;
+  is_basic: boolean;
 }

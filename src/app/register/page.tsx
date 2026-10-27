@@ -144,7 +144,6 @@ export default function RegisterPage() {
 
   async function handleSaveDetails() {
     const required: (keyof DriverForm)[] = [
-      'msa_licence_no',
       'full_name',
       'mobile',
       'postal_address',
@@ -170,7 +169,7 @@ export default function RegisterPage() {
     setBusy(true);
     const { error } = await supabase.from('drivers').insert({
       auth_user_id: session.user.id,
-      msa_licence_no: form.msa_licence_no.trim(),
+      msa_licence_no: form.msa_licence_no.trim() || null,
       wpmc_member_no: form.wpmc_member_no.trim() || null,
       full_name: form.full_name.trim(),
       email: session.user.email,
