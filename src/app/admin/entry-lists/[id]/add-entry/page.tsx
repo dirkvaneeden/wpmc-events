@@ -8,6 +8,7 @@ import { resolveAdminForSession } from '@/lib/adminAuth';
 import { uploadEntryDocument } from '@/lib/storage';
 import FileField from '@/components/FileField';
 import { Driver, Vehicle, RaceEvent, RaceClass, RaceSubclass, EntryFee, AdminUser } from '@/lib/types';
+import { formatEventDates } from '@/lib/eventDates';
 
 interface NewDriverForm {
   msa_licence_no: string;
@@ -1070,7 +1071,7 @@ export default function AddEntryPage() {
       </div>
       <h1 className="text-2xl font-semibold mb-1">Add entry on behalf of a competitor</h1>
       <div className="text-sm text-[var(--fiori-text-subtle)] mb-6">
-        {event.name} · {new Date(event.event_date).toLocaleDateString()}
+        {event.name} · {formatEventDates(event.event_date, event.end_date)}
         {new Date() > new Date(event.late_entry_cutoff) && (
           <span
             className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm"

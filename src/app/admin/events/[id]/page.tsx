@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { RaceEvent, RaceClass, RaceSubclass, EntryFee, BankDetails, EntryType } from '@/lib/types';
+import { formatEventDates } from '@/lib/eventDates';
 
 type Notify = (type: 'positive' | 'negative', text: string) => void;
 
@@ -1341,7 +1342,7 @@ export default function EventSetupPage() {
       </div>
       <h1 className="text-2xl font-semibold mb-1">{event.name}</h1>
       <div className="text-sm text-[var(--fiori-text-subtle)] mb-1">
-        {new Date(event.event_date).toLocaleDateString()} · Late entries after{' '}
+        {formatEventDates(event.event_date, event.end_date)}· Late entries after{' '}
         {new Date(event.late_entry_cutoff).toLocaleString()} ·{' '}
         <span
           className="fiori-status-dot"

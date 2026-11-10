@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { getPaymentState } from '@/lib/paymentState';
+import { formatEventDates } from '@/lib/eventDates';
 
 interface EventRow {
   id: string;
   name: string;
   event_date: string;
+  end_date: string;
   status: boolean | null;
 }
 
@@ -41,7 +43,7 @@ const kindMeta: Record<Kind, { label: string; color: string }> = {
 const kindOrder: Record<Kind, number> = { OPEN: 0, PLANNED: 1, PAST: 2 };
 
 function kindOf(ev: EventRow, todayStr: string): Kind {
-  if (ev.event_date < todayStr) return 'PAST';
+  if (ev.end_date < todayStr) return 'PAST';
   return ev.status ? 'OPEN' : 'PLANNED';
 }
 
@@ -77,7 +79,7 @@ export default function EntryListsPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: eventsError } = await supabase.from('events').select('id, name, event_date, status');
+      const { data, error: eventsError } = await supabase.from('events').select('id, name, event_date, end_date, status');
       if (eventsError) throw eventsError;
 
       const entries = await fetchEntries();
@@ -177,7 +179,7 @@ export default function EntryListsPage() {
                     {ev.name}
                   </Link>
                 </td>
-                <td>{new Date(ev.event_date).toLocaleDateString()}</td>
+                <td>{formatEventDates(ev.event_date, ev.end_date)}</td>
                 <td>
                   <span className="fiori-status-dot" style={{ background: kindMeta[kind].color }} />
                   {kindMeta[kind].label}

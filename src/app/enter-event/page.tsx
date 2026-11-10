@@ -8,6 +8,7 @@ import { resolveDriverForSession } from '@/lib/driverAuth';
 import { Driver, Vehicle, RaceEvent, RaceClass, RaceSubclass, EntryFee, BankDetails, EntryType } from '@/lib/types';
 import { uploadEntryDocument } from '@/lib/storage';
 import FileField from '@/components/FileField';
+import { formatEventDates } from '@/lib/eventDates';
 
 function StepBar({ current }: { current: number }) {
   const steps = ['Event & Driver Details', 'Vehicle & Race Class', 'Review & Payment', 'Confirmation'];
@@ -573,7 +574,7 @@ export default function EnterEventPage() {
                 <option value="">— Select —</option>
                 {events.map((ev) => (
                   <option key={ev.id} value={ev.id}>
-                    {ev.name}
+                    {ev.name} ({formatEventDates(ev.event_date, ev.end_date)})
                   </option>
                 ))}
               </select>

@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { RaceEvent } from '@/lib/types';
 import { getSignedDocumentUrl, uploadEntryDocument } from '@/lib/storage';
 import { getPaymentState, paymentStateMeta, PaymentStateKey } from '@/lib/paymentState';
+import { formatEventDates } from '@/lib/eventDates';
 
 interface PaymentRow {
   id: string;
@@ -398,7 +399,7 @@ export default function EventEntryListPage() {
       </div>
 
       <div className="text-sm text-[var(--fiori-text-subtle)] mb-6">
-        {new Date(event.event_date).toLocaleDateString()} ·{' '}
+        {formatEventDates(event.event_date, event.end_date)} ·{' '}
         <span
           className="fiori-status-dot"
           style={{ background: event.status ? 'var(--fiori-positive)' : '#5e696e' }}

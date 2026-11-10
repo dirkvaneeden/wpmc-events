@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { RaceEvent } from '@/lib/types';
 import { REPORT_SELECT, ReportEntry, groupByClass, reportFileName, vehicleText } from '@/lib/classReport';
 import { getPaymentState, paymentStateMeta } from '@/lib/paymentState';
+import { formatEventDates } from '@/lib/eventDates';
+
 
 export default function ClassReportPage() {
   const { id } = useParams<{ id: string }>();
@@ -114,7 +116,7 @@ export default function ClassReportPage() {
         <div>
           <h1 className="text-2xl font-semibold mb-1">Class report</h1>
           <div className="text-sm text-[var(--fiori-text-subtle)]">
-            {event.name} · {new Date(event.event_date).toLocaleDateString()} · {entries.length}{' '}
+            {event.name} · {formatEventDates(event.event_date, event.end_date)} · {entries.length}{' '}
             {entries.length === 1 ? 'entry' : 'entries'} in {groups.length} {groups.length === 1 ? 'class' : 'classes'}
           </div>
         </div>

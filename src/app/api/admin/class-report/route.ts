@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
     const { data: event } = await caller
       .from('events')
-      .select('id, name, event_date')
+      .select('id, name, event_date, end_date')
       .eq('id', eventId)
       .maybeSingle();
 
@@ -124,7 +124,11 @@ export async function GET(req: NextRequest) {
     for (let i = 2; i <= 6; i++) summary.getColumn(i).width = 16;
 
     summary.addRow([event.name]).font = { bold: true, size: 14 };
-    summary.addRow([`Event date: ${event.event_date}`]);
+    summary.addRow([
+      event.end_date && event.end_date !== event.event_date
+        ? `Event dates: ${event.event_date} to ${event.end_date}`
+        : `Event date: ${event.event_date}`,
+    ]);
     summary.addRow([`Report generated: ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC`]);
     summary.addRow([]);
     styleHeader(summary.addRow(['Class', 'Entries', 'Paid', 'POP received', 'Awaiting POP', 'No payment due']));

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { formatEventDates } from '@/lib/eventDates';
 
 interface EventRow {
   id: string;
   name: string;
   event_date: string;
+  end_date: string;
   status: boolean | null;
 }
 
@@ -89,7 +91,7 @@ function EventTable({
             return (
               <tr key={ev.id}>
                 <td>{ev.name}</td>
-                <td>{new Date(ev.event_date).toLocaleDateString()}</td>
+                <td>{formatEventDates(ev.event_date, ev.end_date)}</td>
                 <td style={{ textAlign: 'right' }}>{s.entries}</td>
                 <td style={{ textAlign: 'right' }}>
                   {s.paid} of {s.entries}
@@ -132,17 +134,17 @@ export default function AdminDashboardPage() {
     try {
       const { data, error: eventsError } = await supabase
         .from('events')
-        .select('id, name, event_date, status')
+        .select('id, name, event_date, end_date, status')
         .order('event_date', { ascending: true });
       if (eventsError) throw eventsError;
 
       const events = (data ?? []) as EventRow[];
       const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
 
-      const currentEvents = events.filter((e) => e.status && e.event_date >= todayStr);
-      const plannedEvents = events.filter((e) => !e.status && e.event_date >= todayStr);
+      const currentEvents = events.filter((e) => e.status && e.end_date >= todayStr);
+      const plannedEvents = events.filter((e) => e.status && e.end_date >= todayStr);
       const pastEvents = events
-        .filter((e) => e.event_date < todayStr)
+        .filter((e) => e.end_date < todayStr)
         .sort((a, b) => b.event_date.localeCompare(a.event_date))
         .slice(0, 5);
 

@@ -13,6 +13,7 @@ export interface RaceEvent {
   id: string;
   name: string;
   event_date: string;
+  end_date: string;
   late_entry_cutoff: string;
   created_at: string;
   status: boolean | null;
@@ -49,6 +50,7 @@ export interface Driver {
   popia_email_opt_in: boolean | null;
   popia_sms_opt_in: boolean | null;
   created_at: string;
+
 }
 
 export interface Vehicle {

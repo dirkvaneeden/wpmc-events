@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Driver, Vehicle } from '@/lib/types';
 import { getPaymentState, paymentStateMeta } from '@/lib/paymentState';
+import { eventPhase, formatEventDates } from '@/lib/eventDates';
 import Link from 'next/link';
 
 interface DriverForm {
@@ -38,7 +39,7 @@ interface HistoryRow {
   fee_amount: number;
   status: string;
   pop_url_driver: string | null;
-  events: { name: string; event_date: string } | null;
+  events: { name: string; event_date: string; end_date: string } | null;
   race_classes: { name: string } | null;
   race_subclasses: { name: string } | null;
   vehicles: { make: string; model: string; year: number } | null;
@@ -115,7 +116,7 @@ export default function MyProfilePage() {
       .select(
         `
         id, vehicle_id, race_number, fee_amount, status, pop_url_driver,
-        events(name, event_date),
+        events(name, event_date, end_date),
         race_classes(name),
         race_subclasses(name),
         vehicles(make, model, year)
@@ -509,19 +510,19 @@ export default function MyProfilePage() {
               </tr>
             )}
             {history.map((h) => {
-              const upcoming = (h.events?.event_date ?? '') >= new Date().toLocaleDateString('en-CA');
+              const phase = h.events ? eventPhase(h.events.event_date, h.events.end_date) : 'PAST';
               const meta = paymentStateMeta[getPaymentState(h.status, h.pop_url_driver, h.fee_amount)];
               return (
                 <tr key={h.id}>
-                  <td>{h.events ? new Date(h.events.event_date).toLocaleDateString() : '—'}</td>
+                  <td>{h.events ? formatEventDates(h.events.event_date, h.events.end_date) : '—'}</td>
                   <td>
                     {h.events?.name ?? '—'}
-                    {upcoming && (
+                    {phase !== 'PAST' && (
                       <span
                         className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-sm"
                         style={{ background: '#eff4f9', color: 'var(--fiori-action)' }}
                       >
-                        UPCOMING
+                        {phase === 'RUNNING' ? 'IN PROGRESS' : 'UPCOMING'}
                       </span>
                     )}
                   </td>
