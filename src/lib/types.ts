@@ -139,3 +139,65 @@ export interface EntryType {
   requires_documents: boolean;
   is_basic: boolean;
 }
+
+export type MembershipYear = {
+  year: number;
+  last_member_no: number;
+  reduction_pct: number;
+  rounding_mode: 'up' | 'down' | 'decimals';
+  created_at: string;
+  updated_at: string;
+};
+
+export type MembershipPrice = {
+  id: string;
+  year: number;
+  category_key: string;
+  label: string;
+  note: string | null;
+  price_group: 'membership' | 'lounge';
+  price: number;
+  sort_order: number;
+  active: boolean;
+  price_updated_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MembershipPriceHistory = {
+  id: string;
+  price_id: string;
+  year: number;
+  label: string;
+  old_price: number | null;
+  new_price: number;
+  reason: 'created' | 'manual' | 'proposal_accepted' | 'proposal_rejected' | 'copied';
+  changed_by: string | null;
+  changed_at: string;
+};
+
+export type MembershipApplication = {
+  id: string;
+  year: number;
+  application_type: 'new' | 'renew';
+  status: 'submitted' | 'payment_confirmed' | 'approved' | 'rejected';
+  surname: string;
+  first_name: string;
+  id_number: string | null;
+  email: string;
+  mobile: string | null;
+  category_label: string | null;
+  category_price: number | null;
+  lounge_label: string | null;
+  lounge_price: number | null;
+  total_due: number;
+  partners: { role: string; name: string; id_no: string; email: string; cell: string }[];
+  sections: string[];
+  pop_url: string | null;
+  flagged: boolean;
+  flag_reason: string | null;
+  member_no: string | null;
+  payment_confirmed_at: string | null;
+  approved_at: string | null;
+  created_at: string;
+};

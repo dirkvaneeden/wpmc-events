@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { resolveDriverForSession } from '@/lib/driverAuth';
+import { fetchMemberPrefill } from '@/lib/memberPrefill';
 
 
 type Step = 'checking' | 'email' | 'otp' | 'details';
@@ -73,11 +74,36 @@ export default function RegisterPage() {
       router.replace('/my/profile');
     } else {
       setStep('details');
+      prefillFromMembership();
     }
   }
 
   function update<K extends keyof DriverForm>(key: K, value: DriverForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Fills blank fields from the driver's WPMC membership (matched by login email)
+  async function prefillFromMembership() {
+    const found = await fetchMemberPrefill();
+    if (!found) return;
+    setForm((f) => ({
+      ...f,
+      wpmc_member_no: f.wpmc_member_no || found.member_no,
+      full_name: f.full_name || found.full_name,
+      mobile: f.mobile || found.mobile,
+      tel_home: f.tel_home || found.tel_home,
+      tel_work: f.tel_work || found.tel_work,
+      postal_address: f.postal_address || found.postal_address,
+      postal_code: f.postal_code || found.postal_code,
+      emergency_contact: f.emergency_contact || found.emergency_contact,
+      emergency_tel: f.emergency_tel || found.emergency_tel,
+      popia_email_opt_in: f.popia_email_opt_in || found.popia_email_opt_in,
+      popia_sms_opt_in: f.popia_sms_opt_in || found.popia_sms_opt_in,
+    }));
+    setMessage({
+      type: 'positive',
+      text: `We found your WPMC membership (${found.member_no}) and filled in your details. Please check them before saving.`,
+    });
   }
 
   async function handleSendCode() {
@@ -139,6 +165,7 @@ export default function RegisterPage() {
       router.replace('/my/profile');
     } else {
       setStep('details');
+      prefillFromMembership();
     }
   }
 

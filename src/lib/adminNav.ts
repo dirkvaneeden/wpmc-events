@@ -9,5 +9,7 @@ export const adminNavItems: AdminNavItem[] = [
   { href: '/admin', label: 'Dashboard', exact: true },
   { href: '/admin/events', label: 'Events' },
   { href: '/admin/entry-lists', label: 'Entry Lists' },
+  { href: '/admin/membership', label: 'Membership Prices', exact: true },
+  { href: '/admin/membership/applications', label: 'Membership Applications' },
   { href: '/admin/users', label: 'Admin Users' },
 ];

@@ -27,6 +27,13 @@ export default function HomePage() {
             >
               Existing Driver — Log In
             </Link>
+            <div className="border-t border-[var(--fiori-border)] my-2" />
+            <Link
+              href="/membership/apply"
+              className="fiori-btn fiori-btn-ghost w-full inline-flex items-center justify-center"
+            >
+              Club Membership — Apply or Renew
+            </Link>
           </div>
           <p className="text-xs text-center text-[var(--fiori-text-subtle)] mt-8">
             Club staff?{' '}

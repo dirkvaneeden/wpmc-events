@@ -7,6 +7,7 @@ import { Driver, Vehicle } from '@/lib/types';
 import { getPaymentState, paymentStateMeta } from '@/lib/paymentState';
 import { eventPhase, formatEventDates } from '@/lib/eventDates';
 import Link from 'next/link';
+import { fetchMemberPrefill, MemberPrefill } from '@/lib/memberPrefill';
 
 interface DriverForm {
   msa_licence_no: string;
@@ -61,6 +62,7 @@ export default function MyProfilePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
 
+  const [membership, setMembership] = useState<MemberPrefill | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<DriverForm | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -102,6 +104,7 @@ export default function MyProfilePage() {
     }
 
     setDriver(driverData);
+    fetchMemberPrefill().then(setMembership);
 
     const { data: vehiclesData } = await supabase
       .from('vehicles')
@@ -139,19 +142,20 @@ export default function MyProfilePage() {
     router.replace('/');
   }
 
-  function openEditProfile() {
+  function openEditProfile(fromMembership = false) {
     if (!driver) return;
+    const m = fromMembership ? membership : null;
     setProfileForm({
       msa_licence_no: driver.msa_licence_no ?? '',
-      wpmc_member_no: driver.wpmc_member_no ?? '',
-      full_name: driver.full_name,
-      mobile: driver.mobile,
-      tel_home: driver.tel_home ?? '',
-      tel_work: driver.tel_work ?? '',
-      postal_address: driver.postal_address,
-      postal_code: driver.postal_code,
-      emergency_contact: driver.emergency_contact,
-      emergency_tel: driver.emergency_tel,
+      wpmc_member_no: m ? m.member_no : (driver.wpmc_member_no ?? ''),
+      full_name: driver.full_name || m?.full_name || '',
+      mobile: driver.mobile || m?.mobile || '',
+      tel_home: driver.tel_home || m?.tel_home || '',
+      tel_work: driver.tel_work || m?.tel_work || '',
+      postal_address: driver.postal_address || m?.postal_address || '',
+      postal_code: driver.postal_code || m?.postal_code || '',
+      emergency_contact: driver.emergency_contact || m?.emergency_contact || '',
+      emergency_tel: driver.emergency_tel || m?.emergency_tel || '',
       popia_email_opt_in: driver.popia_email_opt_in ?? false,
       popia_sms_opt_in: driver.popia_sms_opt_in ?? false,
     });
@@ -336,11 +340,26 @@ export default function MyProfilePage() {
             >
               + Enter an Event
             </Link>
-            <button className="fiori-btn fiori-btn-ghost" onClick={openEditProfile}>
+            <button className="fiori-btn fiori-btn-ghost" onClick={() => openEditProfile()}>
               Edit Profile
             </button>
           </div>
         </div>
+
+        {membership && driver.wpmc_member_no !== membership.member_no && (
+          <div
+            className="mb-4 px-4 py-3 text-sm rounded-sm border flex items-center justify-between gap-4"
+            style={{ borderColor: 'var(--fiori-action)', background: '#f1f6fb' }}
+          >
+            <span>
+              We found your WPMC membership, no. <strong>{membership.member_no}</strong>. Update your profile with
+              your membership details?
+            </span>
+            <button className="fiori-btn fiori-btn-emphasized whitespace-nowrap" onClick={() => openEditProfile(true)}>
+              Use membership details
+            </button>
+          </div>
+        )}
 
         {message && (
           <div
