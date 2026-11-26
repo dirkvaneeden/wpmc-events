@@ -1,50 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import {
+  ADD_ON_CATEGORY_KEYS,
   ApplicationPayload,
   BANK_DETAILS,
-  MAX_POP_BYTES,
-  MAX_QTY,
+  MAX_MEMBERS,
   PARTNER_CATEGORY_KEYS,
+  RELATIONSHIPS,
   SECTIONS,
 } from '@/lib/membershipForm';
 import { formatRand } from '@/lib/membershipPricing';
+import {
+  emailRe,
+  esc,
+  escapeLike,
+  pickYear,
+  popProblem,
+  removePop,
+  serviceClient,
+  uploadPop,
+} from '@/lib/membershipServer';
 
 export const runtime = 'nodejs';
-
-const BUCKET = 'membership-documents';
-
-function esc(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (m) => `\\${m}`);
-}
-
-const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function fail(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-export async function POST(req: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) return fail('The server is not configured.', 500);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  let uploadedPath: string | null = null;
-  const db = createClient(supabaseUrl, serviceKey);
+export async function POST(req: NextRequest) {
+  const db = serviceClient();
+  if (!db) return fail('The server is not configured.', 500);
+
+  let newPath: string | null = null; // a proof of payment uploaded by THIS request
 
   try {
     const form = await req.formData();
     const raw = form.get('payload');
-    if (typeof raw !== 'string') return fail('Missing application data.');
+    if (typeof raw !== 'string' || raw.length > 200_000) return fail('Missing or oversized application data.');
 
     let p: ApplicationPayload;
     try {
@@ -55,6 +49,25 @@ export async function POST(req: NextRequest) {
 
     // Spam trap: real people leave this empty
     if (p.website) return NextResponse.json({ reference: 'OK', total: 0 });
+
+    // ----- Draft being submitted (optional) -----
+    const tokenIn = form.get('token');
+    const token = typeof tokenIn === 'string' && UUID_RE.test(tokenIn) ? tokenIn : null;
+    let draft: { id: string; year: number; pop_url: string | null; draft_expires_at: string | null } | null = null;
+    if (token) {
+      const { data } = await db
+        .from('membership_applications')
+        .select('id, year, status, pop_url, draft_expires_at')
+        .eq('resume_token', token)
+        .maybeSingle();
+      if (!data || data.status !== 'draft') {
+        return fail('This saved application is no longer available. Please start a new application.', 410);
+      }
+      if (data.draft_expires_at && new Date(data.draft_expires_at) < new Date()) {
+        return fail('This saved application has expired. Please start a new application.', 410);
+      }
+      draft = data;
+    }
 
     // ----- Validate -----
     const email = (p.email ?? '').trim().toLowerCase();
@@ -78,18 +91,20 @@ export async function POST(req: NextRequest) {
     if (p.is_minor && !String(p.guardian_name ?? '').trim()) {
       return fail('Enter the parent or guardian name for a minor.');
     }
-    if (!Array.isArray(p.categories) || p.categories.length === 0) {
-      return fail('Choose at least one membership category.');
+    if (!p.main_category) return fail('Choose your membership category.');
+
+    // ----- Proof of payment is mandatory -----
+    const pop = form.get('pop');
+    if (pop instanceof File && pop.size > 0) {
+      const problem = popProblem(pop);
+      if (problem) return fail(problem);
+    } else if (!draft?.pop_url) {
+      return fail('Attach your proof of payment to submit your application. You can save it and come back later.');
     }
 
-    // ----- Year and prices (always taken from the database, never from the browser) -----
-    const { data: yearRows, error: yearErr } = await db
-      .from('membership_years')
-      .select('year')
-      .order('year', { ascending: false });
-    if (yearErr || !yearRows?.length) return fail('Membership prices are not available right now.', 500);
-    const thisYear = new Date().getFullYear();
-    const year = yearRows.some((y) => y.year === thisYear) ? thisYear : yearRows[0].year;
+    // ----- Year and prices (always from the database, never from the browser) -----
+    const year = draft ? draft.year : await pickYear(db);
+    if (!year) return fail('Membership prices are not available right now.', 500);
 
     const { data: priceRows, error: priceErr } = await db
       .from('membership_prices')
@@ -99,23 +114,18 @@ export async function POST(req: NextRequest) {
     if (priceErr || !priceRows) return fail('Membership prices are not available right now.', 500);
     const byKey = new Map(priceRows.map((r) => [r.category_key as string, r]));
 
-    let membershipTotal = 0;
-    const labelParts: string[] = [];
-    let firstCategoryId: string | null = null;
-    let needsPartner = false;
-    const seen = new Set<string>();
-    for (const c of p.categories) {
-      const row = byKey.get(c.key);
-      if (!row || row.price_group !== 'membership') return fail('One of the selected categories is not available.');
-      if (seen.has(c.key)) return fail('A category was selected twice.');
-      seen.add(c.key);
-      const maxQty = MAX_QTY[c.key] ?? 1;
-      const qty = Math.floor(Number(c.qty));
-      if (!qty || qty < 1 || qty > maxQty) return fail('Invalid quantity for a category.');
-      membershipTotal += Number(row.price) * qty;
-      labelParts.push(qty > 1 ? `${row.label} x${qty}` : String(row.label));
-      if (!firstCategoryId) firstCategoryId = row.id as string;
-      if (PARTNER_CATEGORY_KEYS.includes(c.key)) needsPartner = true;
+    const main = byKey.get(p.main_category);
+    if (!main || main.price_group !== 'membership' || ADD_ON_CATEGORY_KEYS.includes(p.main_category)) {
+      return fail('The selected membership category is not available.');
+    }
+    let membershipTotal = Number(main.price);
+    const labelParts: string[] = [String(main.label)];
+
+    if (p.replacement_book) {
+      const book = byKey.get('replacement_book');
+      if (!book) return fail('The replacement book is not available.');
+      membershipTotal += Number(book.price);
+      labelParts.push(String(book.label));
     }
 
     let lounge: { id: string; label: string; price: number } | null = null;
@@ -124,42 +134,76 @@ export async function POST(req: NextRequest) {
       if (!row || row.price_group !== 'lounge') return fail('The selected lounge option is not available.');
       lounge = { id: row.id as string, label: String(row.label), price: Number(row.price) };
     }
-    const total = Math.round((membershipTotal + (lounge?.price ?? 0)) * 100) / 100;
 
-    // Partner and junior members
-    const partners = (Array.isArray(p.partners) ? p.partners : [])
-      .map((x) => ({
-        role: String(x.role ?? '').slice(0, 40),
-        name: String(x.name ?? '').trim().slice(0, 120),
-        id_no: String(x.id_no ?? '').trim().slice(0, 40),
-        email: String(x.email ?? '').trim().slice(0, 120),
-        cell: String(x.cell ?? '').trim().slice(0, 40),
-      }))
-      .filter((x) => x.name);
-    if (needsPartner && !partners.some((x) => x.role === 'Partner')) {
+    // ----- Partner and junior members -----
+    const submitted = Array.isArray(p.members) ? p.members : [];
+    if (submitted.length > MAX_MEMBERS) return fail(`You can add up to ${MAX_MEMBERS} members.`);
+
+    const hasPartnerCategory = PARTNER_CATEGORY_KEYS.includes(p.main_category);
+    const nowIso = new Date().toISOString();
+    let membersTotal = 0;
+    let partnerCount = 0;
+    const members: Record<string, unknown>[] = [];
+
+    for (const [i, m] of submitted.entries()) {
+      const rel = RELATIONSHIPS.find((r) => r.key === m.relationship);
+      if (!rel) return fail(`Member ${i + 1}: choose a relationship.`);
+      const name = String(m.name ?? '').trim().slice(0, 120);
+      const idNo = String(m.id_no ?? '').trim().slice(0, 40);
+      if (!name) return fail(`Member ${i + 1}: enter a name and surname.`);
+      if (!idNo) return fail(`${name}: enter an ID number.`);
+      if (!m.waiver_accepted || !String(m.waiver_name ?? '').trim()) {
+        return fail(`${name}: accept the waiver and indemnity and type a full name to sign.`);
+      }
+
+      let cost = 0;
+      let roleLabel: string = rel.label;
+      if (rel.priceKey === null) {
+        partnerCount += 1;
+      } else {
+        const row = byKey.get(rel.priceKey);
+        if (!row) return fail(`${rel.label} is not available right now.`);
+        cost = Number(row.price);
+        roleLabel = String(row.label);
+      }
+      membersTotal += cost;
+
+      members.push({
+        relationship: rel.key,
+        role: roleLabel,
+        name,
+        id_no: idNo,
+        email: String(m.email ?? '').trim().slice(0, 120),
+        cell: String(m.cell ?? '').trim().slice(0, 40),
+        cost,
+        minor: rel.minor,
+        waiver_accepted: true,
+        waiver_name: String(m.waiver_name).trim().slice(0, 150),
+        waiver_accepted_at: nowIso,
+      });
+    }
+
+    if (partnerCount > 1) return fail('Only one partner can be added.');
+    if (partnerCount === 1 && !hasPartnerCategory) {
+      return fail('To add a partner, choose a Member + Partner, Pensioner + Partner or Country + Partner category.');
+    }
+    if (partnerCount === 0 && hasPartnerCategory) {
       return fail('Enter your partner details for the category you selected.');
     }
+
+    const total = Math.round((membershipTotal + membersTotal + (lounge?.price ?? 0)) * 100) / 100;
 
     const sections = (Array.isArray(p.sections) ? p.sections : []).filter((s) =>
       (SECTIONS as readonly string[]).includes(s)
     );
 
-    // ----- Proof of payment (optional) -----
-    const pop = form.get('pop');
+    // ----- Upload the proof of payment (after validation, so nothing is orphaned) -----
     if (pop instanceof File && pop.size > 0) {
-      if (pop.size > MAX_POP_BYTES) return fail('The proof of payment must be smaller than 4 MB.');
-      const okType = pop.type === 'application/pdf' || pop.type.startsWith('image/');
-      if (!okType) return fail('The proof of payment must be a PDF or an image.');
-      const ext = (pop.name.split('.').pop() ?? 'bin').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'bin';
-      uploadedPath = `pop/${crypto.randomUUID()}.${ext}`;
-      const { error: upErr } = await db.storage
-        .from(BUCKET)
-        .upload(uploadedPath, Buffer.from(await pop.arrayBuffer()), { contentType: pop.type, upsert: false });
-      if (upErr) {
-        uploadedPath = null;
-        return fail(`The proof of payment could not be uploaded: ${upErr.message}`, 500);
-      }
+      const up = await uploadPop(db, pop);
+      if ('error' in up) return fail(up.error, 500);
+      newPath = up.path;
     }
+    const popPath = newPath ?? draft?.pop_url ?? null;
 
     // ----- Renewal matching, by email only -----
     const { data: existing } = await db
@@ -188,56 +232,78 @@ export async function POST(req: NextRequest) {
       return s || null;
     };
 
-    const { data: inserted, error: insErr } = await db
-      .from('membership_applications')
-      .insert({
-        year,
-        application_type: p.application_type,
-        status: 'submitted',
-        surname: t(p.surname, 100),
-        first_name: t(p.first_name, 100),
-        id_number: t(p.id_number, 40),
-        email,
-        mobile: t(p.mobile, 40),
-        tel_home: t(p.tel_home, 40),
-        tel_work: t(p.tel_work, 40),
-        fax: t(p.fax, 40),
-        employer: t(p.employer),
-        occupation: t(p.occupation),
-        postal_address: t(p.postal_address, 400),
-        physical_address: t(p.physical_address, 400),
-        category_id: firstCategoryId,
-        category_label: labelParts.join(', '),
-        category_price: membershipTotal,
-        lounge_id: lounge?.id ?? null,
-        lounge_label: lounge?.label ?? null,
-        lounge_price: lounge?.price ?? null,
-        total_due: total,
-        partners,
-        sections,
-        consent_email: !!p.consent_email,
-        consent_mobile: !!p.consent_mobile,
-        consent_newsletter: !!p.consent_newsletter,
-        waiver_accepted: true,
-        waiver_name: t(p.waiver_name, 150),
-        waiver_accepted_at: new Date().toISOString(),
-        emergency_name: t(p.emergency_name, 100),
-        emergency_phone: t(p.emergency_phone, 40),
-        guardian_name: p.is_minor ? t(p.guardian_name, 150) : null,
-        pop_url: uploadedPath,
-        renew_matched: p.application_type === 'renew' ? matched : null,
-        flagged,
-        flag_reason: flagReason,
-      })
-      .select('id')
-      .single();
+    const row = {
+      year,
+      application_type: p.application_type,
+      status: 'submitted',
+      surname: t(p.surname, 100),
+      first_name: t(p.first_name, 100),
+      id_number: t(p.id_number, 40),
+      email,
+      mobile: t(p.mobile, 40),
+      tel_home: t(p.tel_home, 40),
+      tel_work: t(p.tel_work, 40),
+      fax: t(p.fax, 40),
+      employer: t(p.employer),
+      occupation: t(p.occupation),
+      postal_address: t(p.postal_address, 400),
+      physical_address: t(p.physical_address, 400),
+      category_id: main.id as string,
+      category_label: labelParts.join(', '),
+      category_price: membershipTotal,
+      lounge_id: lounge?.id ?? null,
+      lounge_label: lounge?.label ?? null,
+      lounge_price: lounge?.price ?? null,
+      total_due: total,
+      partners: members,
+      sections,
+      consent_email: !!p.consent_email,
+      consent_mobile: !!p.consent_mobile,
+      consent_newsletter: !!p.consent_newsletter,
+      waiver_accepted: true,
+      waiver_name: t(p.waiver_name, 150),
+      waiver_accepted_at: nowIso,
+      emergency_name: t(p.emergency_name, 100),
+      emergency_phone: t(p.emergency_phone, 40),
+      guardian_name: p.is_minor ? t(p.guardian_name, 150) : null,
+      pop_url: popPath,
+      renew_matched: p.application_type === 'renew' ? matched : null,
+      flagged,
+      flag_reason: flagReason,
+    };
 
-    if (insErr || !inserted) {
-      if (uploadedPath) await db.storage.from(BUCKET).remove([uploadedPath]);
-      return fail(`Your application could not be saved: ${insErr?.message ?? 'unknown error'}`, 500);
+    let appId: string;
+    if (draft) {
+      const { error } = await db
+        .from('membership_applications')
+        .update({
+          ...row,
+          created_at: nowIso, // shows as received when it was submitted
+          resume_token: null,
+          draft_payload: null,
+          draft_saved_at: null,
+          draft_expires_at: null,
+        })
+        .eq('id', draft.id)
+        .eq('status', 'draft');
+      if (error) {
+        if (newPath) await removePop(db, newPath);
+        return fail(`Your application could not be saved: ${error.message}`, 500);
+      }
+      appId = draft.id;
+      if (newPath && draft.pop_url) await removePop(db, draft.pop_url);
+    } else {
+      const { data: inserted, error } = await db.from('membership_applications').insert(row).select('id').single();
+      if (error || !inserted) {
+        if (newPath) await removePop(db, newPath);
+        return fail(`Your application could not be saved: ${error?.message ?? 'unknown error'}`, 500);
+      }
+      appId = inserted.id as string;
     }
 
-    const reference = String(inserted.id).slice(0, 8).toUpperCase();
+    newPath = null; // saved: the file is now referenced by the application
+
+    const reference = String(appId).slice(0, 8).toUpperCase();
     const fullName = `${p.first_name.trim()} ${p.surname.trim()}`;
 
     // ----- Emails (a failure here never loses the application) -----
@@ -245,16 +311,22 @@ export async function POST(req: NextRequest) {
     if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
 
+      const memberLines = members
+        .map(
+          (m) =>
+            `<tr><td style="padding:2px 12px 2px 0;">${esc(m.name)}</td><td style="padding:2px 12px 2px 0;color:#6a6d70;">${esc(
+              m.role
+            )}</td><td style="text-align:right;">${Number(m.cost) > 0 ? esc(formatRand(Number(m.cost))) : 'Included'}</td></tr>`
+        )
+        .join('');
+
       const summaryRows = [
         ['Application', p.application_type === 'renew' ? 'Renewal' : 'New membership'],
         ['Year', String(year)],
         ['Category', labelParts.join(', ')],
         ...(lounge ? [['Pheiffer Lounge', lounge.label]] : []),
       ]
-        .map(
-          ([k, v]) =>
-            `<tr><td style="padding:4px 0;color:#6a6d70;">${esc(k)}:</td><td>${esc(v)}</td></tr>`
-        )
+        .map(([k, v]) => `<tr><td style="padding:4px 0;color:#6a6d70;">${esc(k)}:</td><td>${esc(v)}</td></tr>`)
         .join('');
 
       const applicantHtml = `
@@ -265,26 +337,26 @@ export async function POST(req: NextRequest) {
           </div>
           <div style="padding:24px;border:1px solid #d9d9d9;border-top:none;">
             <p>Dear ${esc(fullName)},</p>
-            <p>Thank you for applying. We have received your application, reference <strong>${esc(reference)}</strong>.</p>
+            <p>Thank you for applying. We have received your application and proof of payment, reference <strong>${esc(
+              reference
+            )}</strong>.</p>
             <div style="background:#f7f7f7;border:1px solid #d9d9d9;padding:16px;margin:20px 0;">
               <table style="width:100%;font-size:14px;">${summaryRows}</table>
+              ${
+                members.length
+                  ? `<div style="font-size:12px;color:#6a6d70;margin-top:10px;">Partner and junior members</div><table style="width:100%;font-size:14px;">${memberLines}</table>`
+                  : ''
+              }
             </div>
             <div style="background:#f1f6fb;border:1px solid #c5d8ea;padding:16px;margin:20px 0;text-align:center;">
               <div style="font-size:12px;color:#346187;font-weight:bold;">TOTAL DUE</div>
               <div style="font-size:26px;font-weight:bold;margin:4px 0;">${esc(formatRand(total))}</div>
             </div>
-            ${
-              uploadedPath
-                ? '<p>We have your proof of payment and will check it shortly.</p>'
-                : `<p>Please pay by EFT and send your proof of payment to the club, using reference <strong>${esc(
-                    `${p.surname.trim()} ${reference}`
-                  )}</strong>.</p>
-            <table style="font-size:14px;">
-              <tr><td style="padding:2px 12px 2px 0;color:#6a6d70;">Bank:</td><td>${esc(BANK_DETAILS.bank)}, ${esc(BANK_DETAILS.branchName)}</td></tr>
-              <tr><td style="padding:2px 12px 2px 0;color:#6a6d70;">Account no.:</td><td>${esc(BANK_DETAILS.accountNo)}</td></tr>
-              <tr><td style="padding:2px 12px 2px 0;color:#6a6d70;">Branch code:</td><td>${esc(BANK_DETAILS.branchCode)}</td></tr>
-            </table>`
-            }
+            <p style="font-size:13px;color:#6a6d70;">If you have not paid yet, pay by EFT to ${esc(BANK_DETAILS.bank)}, ${esc(
+              BANK_DETAILS.branchName
+            )}, account ${esc(BANK_DETAILS.accountNo)}, branch code ${esc(BANK_DETAILS.branchCode)}, reference ${esc(
+              `${p.surname.trim()} ${reference}`
+            )}.</p>
             <p style="font-size:13px;color:#6a6d70;">Once your payment is confirmed and your membership is approved, we will email you your membership number.</p>
           </div>
         </div>`;
@@ -299,9 +371,11 @@ export async function POST(req: NextRequest) {
           <p><strong>New membership application ${esc(reference)}</strong></p>
           <p>${esc(fullName)} (${esc(email)}) applied for ${esc(labelParts.join(', '))}${
             lounge ? ` plus ${esc(lounge.label)}` : ''
-          }. Total ${esc(formatRand(total))}. ${uploadedPath ? 'Proof of payment attached.' : 'No proof of payment yet.'}</p>
+          }${members.length ? `, with ${members.length} partner or junior member${members.length > 1 ? 's' : ''}` : ''}. Total ${esc(
+            formatRand(total)
+          )}. Proof of payment attached.</p>
           ${flagged ? `<p style="color:#bb0000;"><strong>Flagged:</strong> ${esc(flagReason)}</p>` : ''}
-          <p style="color:#6a6d70;font-size:13px;">Review it in the admin area under Membership.</p>
+          <p style="color:#6a6d70;font-size:13px;">Review it in the admin area under Membership Applications.</p>
         </div>`;
 
       try {
@@ -330,7 +404,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ reference, total });
   } catch (err) {
-    if (uploadedPath) await db.storage.from(BUCKET).remove([uploadedPath]);
+    if (newPath) await removePop(db, newPath);
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

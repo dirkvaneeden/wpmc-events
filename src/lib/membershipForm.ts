@@ -21,14 +21,8 @@ export const SECTIONS = [
   'BMWCCT Series',
 ] as const;
 
-// Rows of the "Partner / Junior member" table on the form.
-export const PARTNER_ROWS = ['Partner', 'Student', 'Under 12', 'Under 12'] as const;
-
 // Categories that include a partner (the partner details become mandatory).
 export const PARTNER_CATEGORY_KEYS = ['member_partner', 'pensioner_partner', 'country_partner'];
-
-// Categories that can be ticked more than once (the form has two Under 12 rows).
-export const MAX_QTY: Record<string, number> = { under_12: 2 };
 
 export const BANK_DETAILS = {
   bank: 'Nedbank',
@@ -72,7 +66,34 @@ export const WAIVER_PARAGRAPHS: string[] = [
 export const MINOR_WAIVER_TEXT =
   'Minors (under 18 and never married): I, in my capacity as parent/guardian/curator, hereby acknowledge the abovementioned agreement, the contents of which are fully understood and accepted by me and by my son/daughter/ward.';
 
-// Shape of the JSON the form posts to /api/membership/apply
+// Relationships for the partner and junior members table.
+// priceKey is the price-list category that gives the cost; null means "included".
+export const RELATIONSHIPS = [
+  { key: 'partner', label: 'Partner', priceKey: null, minor: false },
+  { key: 'student_u25', label: 'Full Time Student (Under 25)', priceKey: 'student_u25', minor: false },
+  { key: 'student_u18', label: 'Full Time Student (Under 18)', priceKey: 'student_u18', minor: true },
+  { key: 'under_12', label: 'Under 12', priceKey: 'under_12', minor: true },
+] as const;
+
+export type RelationshipKey = (typeof RELATIONSHIPS)[number]['key'];
+
+export const MAX_MEMBERS = 12;
+export const DRAFT_DAYS = 30;
+
+// Categories the main member cannot pick as their own (handled as an add-on).
+export const ADD_ON_CATEGORY_KEYS = ['replacement_book'];
+
+export interface MemberRowPayload {
+  relationship: RelationshipKey;
+  name: string;
+  id_no: string;
+  email: string;
+  cell: string;
+  waiver_accepted: boolean;
+  waiver_name: string; // typed full name (the parent or guardian for minors)
+}
+
+// Shape of the JSON the form posts to /api/membership/apply and /api/membership/draft
 export interface ApplicationPayload {
   application_type: 'new' | 'renew';
   surname: string;
@@ -87,9 +108,10 @@ export interface ApplicationPayload {
   occupation: string;
   postal_address: string;
   physical_address: string;
-  categories: { key: string; qty: number }[];
+  main_category: string; // price-list category_key of the main member
+  replacement_book: boolean;
   lounge_key: string | null;
-  partners: { role: string; name: string; id_no: string; email: string; cell: string }[];
+  members: MemberRowPayload[];
   sections: string[];
   consent_email: boolean;
   consent_mobile: boolean;

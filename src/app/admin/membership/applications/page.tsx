@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { ApplicationRow, ApplicationStatus, appRef, statusMeta } from '@/lib/membershipApplications';
 import { formatDate, formatRand } from '@/lib/membershipPricing';
+import { downloadApplicationsXlsx } from '@/lib/membershipExport';
 
 type Filter = 'ACTION' | 'ALL' | ApplicationStatus;
 
@@ -15,6 +16,7 @@ export default function AdminMembershipApplicationsPage() {
   const [filter, setFilter] = useState<Filter>('ACTION');
   const [year, setYear] = useState<'ALL' | number>('ALL');
   const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -44,6 +46,7 @@ export default function AdminMembershipApplicationsPage() {
     return rows.filter((r) => {
       if (year !== 'ALL' && r.year !== year) return false;
       if (filter === 'ACTION' && !(r.status === 'submitted' || r.status === 'payment_confirmed')) return false;
+      if (filter === 'ALL' && r.status === 'draft') return false;
       if (filter !== 'ACTION' && filter !== 'ALL' && r.status !== filter) return false;
       if (q) {
         const hay = `${r.first_name} ${r.surname} ${r.email} ${r.member_no ?? ''} ${appRef(r.id)}`.toLowerCase();
@@ -52,6 +55,16 @@ export default function AdminMembershipApplicationsPage() {
       return true;
     });
   }, [rows, filter, year, search]);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await downloadApplicationsXlsx(visible);
+    } catch (err) {
+      setError(`Couldn't create the Excel file: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
+    setExporting(false);
+  }
 
   const tile = (label: string, value: number, onClick: () => void) => (
     <button
@@ -98,6 +111,7 @@ export default function AdminMembershipApplicationsPage() {
             <option value="payment_confirmed">Payment confirmed</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
+            <option value="draft">Drafts (not submitted)</option>
           </select>
         </div>
         <div>
@@ -124,6 +138,15 @@ export default function AdminMembershipApplicationsPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+        <button
+          type="button"
+          className="fiori-btn fiori-btn-ghost"
+          onClick={handleExport}
+          disabled={exporting || visible.length === 0}
+          title="Downloads the applications currently shown, with a second sheet for dependants"
+        >
+          {exporting ? 'Preparing…' : `Download Excel (${visible.length})`}
+        </button>
       </div>
 
       <table className="fiori-table">
@@ -165,7 +188,7 @@ export default function AdminMembershipApplicationsPage() {
                   href={`/admin/membership/applications/${r.id}`}
                   className="text-[var(--fiori-action)] hover:underline"
                 >
-                  {r.first_name} {r.surname}
+                  {`${r.first_name} ${r.surname}`.trim() || r.email}
                 </Link>
                 <div className="text-xs text-[var(--fiori-text-subtle)]">{r.email}</div>
               </td>

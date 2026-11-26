@@ -237,7 +237,7 @@ export default function AdminMembershipApplicationPage() {
       </div>
       <div className="flex items-center justify-between gap-4 mb-1">
         <h1 className="text-2xl font-semibold">
-          {app.first_name} {app.surname}
+          {`${app.first_name} ${app.surname}`.trim() || app.email}
         </h1>
         <span className="text-sm whitespace-nowrap">
           <span className="fiori-status-dot" style={{ background: meta.color }} />
@@ -268,6 +268,13 @@ export default function AdminMembershipApplicationPage() {
           style={{ borderColor: '#e9730c', background: '#fef7f1' }}
         >
           <strong>Flagged:</strong> {app.flag_reason}
+        </div>
+      )}
+
+      {app.status === 'draft' && (
+        <div className="mb-4 px-4 py-3 text-sm rounded-sm border" style={{ borderColor: 'var(--fiori-border)', background: '#f5f7fa' }}>
+          This is a saved draft. The applicant has not submitted it yet, so it cannot be approved. It appears as a
+          normal application once they attach a proof of payment and submit.
         </div>
       )}
 
@@ -386,11 +393,13 @@ export default function AdminMembershipApplicationPage() {
           <table className="fiori-table mt-4">
             <thead>
               <tr>
-                <th>Role</th>
+                <th>Relationship</th>
                 <th>Name</th>
                 <th>ID no.</th>
                 <th>Email</th>
                 <th>Cell</th>
+                <th style={{ textAlign: 'right' }}>Cost</th>
+                <th>Waiver signed by</th>
               </tr>
             </thead>
             <tbody>
@@ -401,6 +410,22 @@ export default function AdminMembershipApplicationPage() {
                   <td>{p.id_no}</td>
                   <td>{p.email}</td>
                   <td>{p.cell}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {typeof p.cost === 'number' ? (p.cost > 0 ? formatRand(p.cost) : 'Included') : ''}
+                  </td>
+                  <td>
+                    {p.waiver_accepted ? (
+                      <>
+                        {p.waiver_name}
+                        {p.minor ? ' (parent or guardian)' : ''}
+                        {p.waiver_accepted_at && (
+                          <div className="text-xs text-[var(--fiori-text-subtle)]">{formatDateTime(p.waiver_accepted_at)}</div>
+                        )}
+                      </>
+                    ) : (
+                      ''
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

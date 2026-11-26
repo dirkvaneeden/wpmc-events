@@ -1,4 +1,4 @@
-export type ApplicationStatus = 'submitted' | 'payment_confirmed' | 'approved' | 'rejected';
+export type ApplicationStatus = 'draft' | 'submitted' | 'payment_confirmed' | 'approved' | 'rejected';
 
 export interface ApplicationRow {
   id: string;
@@ -22,7 +22,18 @@ export interface ApplicationRow {
   lounge_label: string | null;
   lounge_price: number | null;
   total_due: number;
-  partners: { role: string; name: string; id_no: string; email: string; cell: string }[];
+  partners: {
+    role: string;
+    name: string;
+    id_no: string;
+    email: string;
+    cell: string;
+    cost?: number;
+    minor?: boolean;
+    waiver_accepted?: boolean;
+    waiver_name?: string;
+    waiver_accepted_at?: string;
+  }[];
   sections: string[];
   consent_email: boolean;
   consent_mobile: boolean;
@@ -48,6 +59,7 @@ export interface ApplicationRow {
 }
 
 export const statusMeta: Record<ApplicationStatus, { label: string; color: string }> = {
+  draft: { label: 'Draft (not submitted)', color: '#8396a8' },
   submitted: { label: 'Awaiting payment check', color: '#e9730c' },
   payment_confirmed: { label: 'Payment confirmed', color: '#0a6ed1' },
   approved: { label: 'Approved', color: '#2b7d2b' },
